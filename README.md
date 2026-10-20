@@ -14,12 +14,13 @@ If you encounter forbidden material, stop and report it.
 
 ## Status
 
-M1. The workspace is scaffolded. `comical-cli` can list pages in ZIP, RAR and
-7z archives or directories and extract one page by index. ZIP supports stored,
-deflate and AES-256 entries; RAR 1.4 through 7 is covered, including solid,
-encrypted data and encrypted headers; 7z supports LZMA2 and AES-256.
-Multi-volume RAR is rejected as unsupported. The UI, spread machine and image
-filters are not started yet.
+M2 core. `comical-cli` can list pages in ZIP, RAR and 7z archives or directories
+and extract one page by index. ZIP supports stored, deflate and AES-256 entries;
+RAR 1.4 through 7 is covered, including solid, encrypted data and encrypted
+headers; 7z supports LZMA2 and AES-256. Multi-volume RAR is rejected as
+unsupported. `comical-core` now provides page orientation, one-page and two-page
+spread state, navigation, zoom, fit and oversize math. The UI and image filters
+are not started yet.
 
 ## Usage
 
@@ -61,8 +62,9 @@ xtask/                 synthetic archive fixture generator
 
 1. ~~Scaffold the Cargo workspace.~~
 2. ~~Implement `comical-cli probe <book>` and `extract` for ZIP, RAR and 7z.~~
-3. Image decoding, the spread machine and the UI come next.
-4. Add `Clean-Room: spec-v1` to every commit.
+3. ~~Implement the spread state machine and zoom math in `comical-core`.~~
+4. Image decoding and the UI come next.
+5. Add `Clean-Room: spec-v1` to every commit.
 
 ## License
 

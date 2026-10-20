@@ -1,7 +1,17 @@
 //! Shared, dependency-free domain types.
 //!
-//! M1 only needs one type: the description of a page inside a book. Image
-//! decoding, spread construction and settings land in later milestones.
+//! This crate contains book-order page descriptions, the spread state machine
+//! and zoom geometry. It performs no file I/O and has no UI, image or archive
+//! dependencies.
+
+mod spread;
+mod zoom;
+
+pub use spread::{PageOrientation, PagePart, PageRef, Spread, SpreadError, SpreadState, ViewMode};
+pub use zoom::{
+    MAX_CUSTOM_PERCENT, MIN_CUSTOM_PERCENT, Size, ZoomMode, ZoomOptions, ZoomResult, compute_zoom,
+    compute_zoom_with_neighbors, is_oversized,
+};
 
 /// One image entry in a book, in book order.
 ///

@@ -62,6 +62,10 @@ analysis document, C++ harness or Bloks memory file was read.
   `cargo test` and `cargo clippy`, checked the dependency license inventory and
   updated the spec, notices and access log. No product code was edited by the
   spec author.
+- 2026-10-20: Builder (clean-room subagent) implemented the M2 core slice in
+  `comical-core` from `spec/behavior.md` and `tests/vectors/` only: spread
+  state, navigation, zoom, fit and oversize. Added serde and serde_json as
+  test-only dependencies for reading the supplied vectors.
 
 ## AI caveat
 
