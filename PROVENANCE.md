@@ -8,7 +8,7 @@ This repository is the clean side of a two-wall rewrite. The original Comical
 | Role | Name | May read original source | May write product code |
 |---|---|---:|---:|
 | Spec author | Engineer (Bloks) | Yes | No |
-| Implementer | pending | No | Yes |
+| Implementer | Builder (clean-room subagent) | No | Yes |
 | Oracle runner | pending | Yes | No |
 | Reviewer | pending | No | No |
 | Legal reviewer | pending | Yes | No |
@@ -29,25 +29,32 @@ Spec version: spec-v1
 
 ## Implementer attestation
 
-Add this before the first code commit:
-
 ```
-I, <name>, attest that:
+I, Builder (clean-room subagent), attest that:
 
 1. I have not read the Comical 0.8 source code or any source-derived notes.
 2. I wrote the code in this contribution from the behavior spec and test vectors.
 3. I did not copy code, comments, identifiers or structure from the original.
 4. I have disclosed every external source I used.
 
-Signed: <name>
-Date: <date>
+Signed: Builder (clean-room subagent)
+Date: 2026-10-20
 Spec version: spec-v1
 ```
+
+External sources used: the behavior specification and vectors in this
+repository, the public documentation and crate sources of the allowed
+dependencies (`zip`, `rars`, `sevenz-rust`, `clap`, `thiserror`, `tempfile`),
+and the Rust standard library documentation. No original Comical source,
+analysis document, C++ harness or Bloks memory file was read.
 
 ## Access log
 
 - 2026-10-20: clean repository created by the spec author. No implementer named
   yet. No product code.
+- 2026-10-20: Builder (clean-room subagent) read only this repository and the
+  public documentation/source of the allowed dependency crates. M1 archive
+  slice added.
 
 ## AI caveat
 
