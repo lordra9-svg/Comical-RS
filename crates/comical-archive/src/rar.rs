@@ -19,6 +19,9 @@ pub(crate) fn open(
     let read_options = ArchiveReadOptions::with_optional_password(password);
     let archive = ArchiveReader::read_path_with_options(path, read_options)
         .map_err(|error| map_open_error(path, error))?;
+    if archive_is_volume(&archive) {
+        return Err(ArchiveError::Unsupported("multi-volume RAR".to_owned()));
+    }
 
     let mut candidates = Vec::new();
     for (index, member) in archive.member_refs().enumerate() {
@@ -56,6 +59,15 @@ pub(crate) fn open(
         sources,
         password: options.password.map(str::to_owned),
     }))
+}
+
+fn archive_is_volume(archive: &rars::Archive) -> bool {
+    match archive {
+        rars::Archive::Rar13(archive) => archive.main.is_volume(),
+        rars::Archive::Rar15To40(archive) => archive.main.is_volume(),
+        rars::Archive::Rar50Plus(archive) => archive.main.is_volume(),
+        _ => false,
+    }
 }
 
 fn normalize_name(bytes: &[u8]) -> String {
