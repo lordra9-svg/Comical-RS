@@ -183,7 +183,7 @@ Oriented page size:
 - For north or south rotation: `w = image width`, `h = image height`.
 - For east or west rotation: `w = image height`, `h = image width`.
 
-Scale is a floating-point factor. Output dimensions truncate: `int(w * scale)`, `int(h * scale)`, at least 1.
+Scale is a floating-point factor. Use 32-bit floats to match 0.8. Output dimensions truncate: `int(w * scale)`, `int(h * scale)`, at least 1.
 
 ### 5.1 Fit
 
