@@ -1,0 +1,21 @@
+[package]
+name = "comical-archive"
+description = "Read-only archive access for the comic viewer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+comical-core = { workspace = true }
+thiserror = { workspace = true }
+
+# Reader only: no writer, recovery, parallel or extra compressor features.
+# Encryption is enabled because the behavior spec requires encrypted archives.
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs", "aes-crypto"] }
+rars = { version = "0.11", default-features = false, features = ["encryption"] }
+sevenz-rust = { version = "0.6.1", default-features = false }
+
+[dev-dependencies]
+tempfile = "3"
+xtask = { path = "../../xtask" }

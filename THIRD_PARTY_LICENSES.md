@@ -11,6 +11,7 @@ This repository is MIT. These dependencies keep their own licenses.
 | `eframe` | MIT OR Apache-2.0 | Windowing and UI |
 | `egui` | MIT OR Apache-2.0 | UI |
 | `clap` | MIT OR Apache-2.0 | CLI |
+| `tempfile` | MIT OR Apache-2.0 | Test-only temporary directories |
 | `serde` | MIT OR Apache-2.0 | Settings |
 | `toml` | MIT OR Apache-2.0 | Settings |
 | `thiserror` | MIT OR Apache-2.0 | Library errors |

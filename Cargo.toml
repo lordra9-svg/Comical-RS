@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/comical-core",
+    "crates/comical-archive",
+    "crates/comical-image",
+    "crates/comical-app",
+    "crates/comical-cli",
+    "xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+repository = "https://example.invalid/comical-rs"
+
+[workspace.dependencies]
+comical-core = { path = "crates/comical-core" }
+comical-archive = { path = "crates/comical-archive" }
+thiserror = "2"
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }

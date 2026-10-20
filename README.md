@@ -14,15 +14,37 @@ If you encounter forbidden material, stop and report it.
 
 ## Status
 
-M0.5. Spec and seed vectors exist. The Cargo workspace is not scaffolded yet.
+M1. The workspace is scaffolded. `comical-cli` can list pages in ZIP, RAR and
+7z archives or directories and extract one page by index. The UI, spread
+machine and image filters are not started yet.
+
+## Usage
+
+Generate synthetic fixtures and probe them:
+
+```
+cargo run -p xtask -- target/fixtures
+cargo run -p comical-cli -- probe target/fixtures/sample.cbz
+cargo run -p comical-cli -- probe target/fixtures/sample.cbr
+cargo run -p comical-cli -- probe target/fixtures/sample.cb7
+cargo run -p comical-cli -- extract target/fixtures/sample.cbz 0 target/page.bin
+```
+
+Pass `--password <value>` for encrypted ZIP AES-256 or RAR entries. Passwords
+are never written to disk.
 
 ## Layout
 
 ```
 spec/                  behavior specification
 tests/vectors/         expected outputs, no reference code
-crates/                product crates (empty)
-xtask/                 build and vector tooling (empty)
+crates/                product crates
+  comical-core/        shared domain types
+  comical-archive/     read-only ZIP, RAR, 7z and directory access
+  comical-image/       placeholder until the image milestone
+  comical-app/         placeholder until the UI milestone
+  comical-cli/         probe and extract commands
+xtask/                 synthetic archive fixture generator
 ```
 
 ## Toolchain
@@ -32,14 +54,12 @@ xtask/                 build and vector tooling (empty)
 - CMake and Ninja are optional.
 - `cargo-nextest`, `cargo-deny`, `cargo-fuzz` are optional at M0.5.
 
-## First tasks
+## Milestones
 
-1. Scaffold the Cargo workspace for `comical-core`, `comical-archive`,
-   `comical-image`, `comical-app` and `comical-cli`.
-2. Implement `comical-cli probe <book>` for ZIP, RAR and 7z.
-3. Add `Clean-Room: spec-v1` to every commit.
-4. Add the implementer attestation to `PROVENANCE.md` before the first code
-   commit.
+1. ~~Scaffold the Cargo workspace.~~
+2. ~~Implement `comical-cli probe <book>` and `extract` for ZIP, RAR and 7z.~~
+3. Image decoding, the spread machine and the UI come next.
+4. Add `Clean-Room: spec-v1` to every commit.
 
 ## License
 
