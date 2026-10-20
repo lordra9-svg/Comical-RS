@@ -87,9 +87,9 @@ fn width_and_height_cover_both_page_layouts_and_orientations() {
         Size::new(600, 400),
         Size::new(1000, 1000),
         options(ViewMode::TwoPage, ZoomMode::Width),
-        0.4,
-        400,
-        400,
+        0.585,
+        585,
+        585,
     );
     check(
         Size::new(600, 400),
@@ -177,6 +177,65 @@ fn fit_only_if_oversized_respects_the_square_portrait_quirk() {
         1.0,
         250,
         250,
+    );
+}
+
+#[test]
+fn height_oversize_halves_the_usable_height_for_portrait_pages() {
+    // The page fits the width half and the full height, so treating only the
+    // width as halved would report it as not oversized and return 1:1.
+    check(
+        Size::new(600, 400),
+        Size::new(250, 300),
+        fit_only(ViewMode::TwoPage, ZoomMode::Height),
+        1.283_333_3,
+        320,
+        385,
+    );
+}
+
+#[test]
+fn neighbor_fallback_applies_when_the_current_page_fits_without_scrollbars() {
+    let canvas = Size::new(600, 400);
+
+    let width_page = Size::new(300, 400);
+    check_with_neighbors(
+        canvas,
+        width_page,
+        options(ViewMode::TwoPage, ZoomMode::Width),
+        &[Size::new(1400, 1000)],
+        0.973_333_3,
+        292,
+        389,
+    );
+    check_with_neighbors(
+        canvas,
+        width_page,
+        options(ViewMode::TwoPage, ZoomMode::Width),
+        &[Size::new(300, 400)],
+        1.0,
+        300,
+        400,
+    );
+
+    let height_page = Size::new(300, 300);
+    check_with_neighbors(
+        canvas,
+        height_page,
+        options(ViewMode::TwoPage, ZoomMode::Height),
+        &[Size::new(2000, 1000)],
+        1.283_333_3,
+        385,
+        385,
+    );
+    check_with_neighbors(
+        canvas,
+        height_page,
+        options(ViewMode::TwoPage, ZoomMode::Height),
+        &[Size::new(300, 300)],
+        1.333_333_3,
+        400,
+        400,
     );
 }
 

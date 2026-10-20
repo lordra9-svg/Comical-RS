@@ -115,9 +115,9 @@ pub fn compute_zoom_with_neighbors(
 
 /// Tests whether a page is larger than the usable area for its zoom mode.
 ///
-/// Full and custom zoom are always oversized. The two-page width half applies
-/// to portrait pages, including square pages; square pages still use the full
-/// canvas width when scaling.
+/// Full and custom zoom are always oversized. The two-page halves apply to
+/// portrait pages, including square pages; square pages still use the full
+/// canvas dimensions when scaling.
 pub fn is_oversized(canvas: Size, page: Size, options: ZoomOptions) -> bool {
     let (usable_width, usable_height) = match options.zoom {
         ZoomMode::Fit => (oversize_width(canvas.width, page, options), canvas.height),
@@ -130,11 +130,12 @@ pub fn is_oversized(canvas: Size, page: Size, options: ZoomOptions) -> bool {
             canvas.height,
         ),
         ZoomMode::Height => (
-            // The only dimension halved in two-page mode is width, including
-            // for height fit. The 5.4 table's "or half" placement is treated
-            // as this width half.
-            oversize_width(canvas.width, page, options),
-            canvas.height.saturating_sub(options.scrollbar),
+            canvas.width,
+            oversize_height(
+                canvas.height.saturating_sub(options.scrollbar),
+                page,
+                options,
+            ),
         ),
         ZoomMode::Full | ZoomMode::Custom => return true,
     };
@@ -154,7 +155,6 @@ fn fit_scale(canvas: Size, page: Size, options: ZoomOptions) -> f32 {
 #[derive(Debug, Clone, Copy)]
 struct FitWidthBase {
     scale: f32,
-    height_fit: bool,
     scrollbar: bool,
 }
 
@@ -164,23 +164,20 @@ fn fit_width_base(canvas: Size, page: Size, options: ZoomOptions) -> FitWidthBas
     if width_scale * page.height as f32 <= canvas.height as f32 {
         return FitWidthBase {
             scale: width_scale,
-            height_fit: false,
             scrollbar: false,
         };
     }
 
     let height_scale = canvas.height as f32 / page.height as f32;
     let scrollbar_width = fit_width_scrollbar_width(canvas.width, page, options);
-    if height_scale * page.width as f32 > scrollbar_width as f32 {
+    if (height_scale * page.width as f32) as u32 > scrollbar_width {
         FitWidthBase {
             scale: height_scale,
-            height_fit: true,
             scrollbar: false,
         }
     } else {
         FitWidthBase {
             scale: scrollbar_width as f32 / page.width as f32,
-            height_fit: false,
             scrollbar: true,
         }
     }
@@ -188,7 +185,7 @@ fn fit_width_base(canvas: Size, page: Size, options: ZoomOptions) -> FitWidthBas
 
 fn fit_width_scale(canvas: Size, page: Size, options: ZoomOptions, neighbors: &[Size]) -> f32 {
     let base = fit_width_base(canvas, page, options);
-    if base.height_fit
+    if !base.scrollbar
         && options.mode == ViewMode::TwoPage
         && neighbors
             .iter()
@@ -202,17 +199,15 @@ fn fit_width_scale(canvas: Size, page: Size, options: ZoomOptions, neighbors: &[
 #[derive(Debug, Clone, Copy)]
 struct FitHeightBase {
     scale: f32,
-    width_fit: bool,
     scrollbar: bool,
 }
 
 fn fit_height_base(canvas: Size, page: Size, options: ZoomOptions) -> FitHeightBase {
     let height_scale = canvas.height as f32 / page.height as f32;
     let usable_width = fit_usable_width(canvas.width, page, options);
-    if height_scale * page.width as f32 <= usable_width as f32 {
+    if (height_scale * page.width as f32) as u32 <= usable_width {
         return FitHeightBase {
             scale: height_scale,
-            width_fit: false,
             scrollbar: false,
         };
     }
@@ -222,13 +217,11 @@ fn fit_height_base(canvas: Size, page: Size, options: ZoomOptions) -> FitHeightB
     if width_scale * page.height as f32 > scrollbar_height as f32 {
         FitHeightBase {
             scale: width_scale,
-            width_fit: true,
             scrollbar: false,
         }
     } else {
         FitHeightBase {
             scale: scrollbar_height as f32 / page.height as f32,
-            width_fit: false,
             scrollbar: true,
         }
     }
@@ -236,7 +229,7 @@ fn fit_height_base(canvas: Size, page: Size, options: ZoomOptions) -> FitHeightB
 
 fn fit_height_scale(canvas: Size, page: Size, options: ZoomOptions, neighbors: &[Size]) -> f32 {
     let base = fit_height_base(canvas, page, options);
-    if base.width_fit
+    if !base.scrollbar
         && options.mode == ViewMode::TwoPage
         && neighbors
             .iter()
@@ -257,7 +250,10 @@ fn fit_usable_width(canvas_width: u32, page: Size, options: ZoomOptions) -> u32 
 
 fn fit_width_scrollbar_width(canvas_width: u32, page: Size, options: ZoomOptions) -> u32 {
     let available = canvas_width.saturating_sub(options.scrollbar);
-    if options.mode == ViewMode::TwoPage && is_portrait(page) {
+    // This follows the same wide-for-scaling branch as usable width, so square
+    // pages keep the full scrollbar width even though oversize treats them as
+    // portrait.
+    if options.mode == ViewMode::TwoPage && !is_wide(page) {
         available / 2
     } else {
         available
@@ -269,6 +265,14 @@ fn oversize_width(canvas_width: u32, page: Size, options: ZoomOptions) -> u32 {
         canvas_width / 2
     } else {
         canvas_width
+    }
+}
+
+fn oversize_height(available_height: u32, page: Size, options: ZoomOptions) -> u32 {
+    if options.mode == ViewMode::TwoPage && is_portrait(page) {
+        available_height / 2
+    } else {
+        available_height
     }
 }
 

@@ -255,19 +255,28 @@ impl SpreadState {
     }
 
     fn next_turn_two_page(&self) -> Spread {
-        if let Some(right) = self.spread.right {
-            // A landscape page occupies one half per spread. Moving it to the
-            // left shows its other half, except for the cover spread, where the
-            // first turn advances to the following pages.
-            if right.part != PagePart::Full
-                && self.pages[right.page].is_landscape()
-                && (right.page != 0 || self.spread.left.page != 0)
-            {
-                return landscape_turn(&self.pages, right.page);
-            }
-            return self.advance_after(right.page);
+        let Some(right) = self.spread.right else {
+            return last_spread(&self.pages, ViewMode::TwoPage);
+        };
+
+        // Boundary pages end the book before the half-page rule applies. The
+        // penultimate page still continues when only its left half is shown.
+        let last = self.pages.len() - 1;
+        if right.page >= last || (right.page + 1 == last && right.part != PagePart::Left) {
+            return last_spread(&self.pages, ViewMode::TwoPage);
         }
-        self.advance_after(self.spread.left.page)
+
+        // When the right page is only the left half of a landscape page, that
+        // page continues on the left as its right half and the next page joins
+        // it on the right.
+        if right.part == PagePart::Left && self.pages[right.page].is_landscape() {
+            return Spread {
+                left: PageRef::new(right.page, PagePart::Right),
+                right: Some(page_ref(right.page + 1, &self.pages)),
+            };
+        }
+
+        self.advance_after(right.page)
     }
 
     fn advance_after(&self, page: usize) -> Spread {
@@ -281,19 +290,22 @@ impl SpreadState {
 
     fn prev_turn_two_page(&self) -> Spread {
         let left = self.spread.left;
+        // The leading edge is checked before the half-page rule, so a right
+        // half at page 0 retreats to the first spread rather than reopening the
+        // split page.
+        if left.page == 0 || (left.page == 1 && left.part != PagePart::Right) {
+            return first_spread(&self.pages, ViewMode::TwoPage);
+        }
+
         if left.part == PagePart::Right {
-            let Some(previous) = left.page.checked_sub(1) else {
-                return first_spread(&self.pages, ViewMode::TwoPage);
-            };
+            let previous = left.page - 1;
             return Spread {
                 left: previous_page_ref(previous, &self.pages),
                 right: Some(PageRef::new(left.page, PagePart::Left)),
             };
         }
 
-        let Some(previous) = left.page.checked_sub(1) else {
-            return first_spread(&self.pages, ViewMode::TwoPage);
-        };
+        let previous = left.page - 1;
         if self.pages[previous].is_landscape() {
             return Spread {
                 left: PageRef::new(previous, PagePart::Left),
@@ -333,6 +345,12 @@ impl SpreadState {
 
     fn prev_page_two_page(&self) -> Spread {
         let left = self.spread.left;
+        // Page zero is the left edge of the book. A page step keeps the current
+        // spread, even when the visible left page is the right half of page 0.
+        if left.page == 0 {
+            return self.spread;
+        }
+
         if left.part == PagePart::Right {
             return Spread {
                 left: PageRef::new(left.page, PagePart::Left),
@@ -340,9 +358,7 @@ impl SpreadState {
             };
         }
 
-        let Some(previous) = left.page.checked_sub(1) else {
-            return first_spread(&self.pages, ViewMode::TwoPage);
-        };
+        let previous = left.page - 1;
         Spread {
             left: previous_page_ref(previous, &self.pages),
             right: Some(left),
@@ -401,20 +417,6 @@ fn start_spread(pages: &[PageOrientation], page: usize) -> Spread {
     Spread {
         left: PageRef::new(page, PagePart::Full),
         right: (following < pages.len()).then(|| page_ref(following, pages)),
-    }
-}
-
-fn landscape_turn(pages: &[PageOrientation], page: usize) -> Spread {
-    if page + 1 < pages.len() {
-        Spread {
-            left: PageRef::new(page, PagePart::Right),
-            right: Some(page_ref(page + 1, pages)),
-        }
-    } else {
-        Spread {
-            left: PageRef::new(page, PagePart::Left),
-            right: Some(PageRef::new(page, PagePart::Right)),
-        }
     }
 }
 

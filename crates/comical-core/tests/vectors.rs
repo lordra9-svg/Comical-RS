@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use comical_core::{
     PageOrientation, PagePart, PageRef, Size, Spread, SpreadState, ViewMode, ZoomMode, ZoomOptions,
-    compute_zoom,
+    compute_zoom_with_neighbors,
 };
 use serde::Deserialize;
 
@@ -62,6 +62,8 @@ struct ZoomCase {
     zoom: ZoomJson,
     zoom_percent: u32,
     fit_only_oversize: bool,
+    #[serde(default)]
+    neighbors: Vec<SizeJson>,
     expected: ZoomExpected,
 }
 
@@ -158,7 +160,12 @@ fn zoom_vectors_match() {
             fit_only_if_oversized: case.fit_only_oversize,
         };
 
-        let result = compute_zoom(canvas, page, options);
+        let neighbors: Vec<Size> = case
+            .neighbors
+            .iter()
+            .map(|neighbor| Size::new(neighbor.width, neighbor.height))
+            .collect();
+        let result = compute_zoom_with_neighbors(canvas, page, options, &neighbors);
         assert!(
             (f64::from(result.scale) - case.expected.scale).abs() <= 1e-6,
             "zoom vector {}: scale {} != {}",

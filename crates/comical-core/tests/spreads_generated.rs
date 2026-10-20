@@ -71,6 +71,76 @@ fn all_portrait_turn_and_page_operations_are_inverse() {
 }
 
 #[test]
+fn split_landscape_next_turn_respects_the_last_spread_guard() {
+    let split = |page: usize| Spread {
+        left: PageRef::new(page, PagePart::Left),
+        right: Some(PageRef::new(page, PagePart::Right)),
+    };
+
+    // Mid-book, the split page advances to the pages that follow it.
+    let mut state = SpreadState::with_spread(
+        vec![Portrait, Portrait, Landscape, Portrait, Portrait],
+        ViewMode::TwoPage,
+        split(2),
+    )
+    .unwrap();
+    state.next_turn();
+    assert_eq!(
+        state.spread(),
+        Spread {
+            left: PageRef::new(3, PagePart::Full),
+            right: Some(PageRef::new(4, PagePart::Full)),
+        }
+    );
+
+    // The penultimate page ends the book, so the last-spread rule carries its
+    // right half forward instead.
+    let mut state = SpreadState::with_spread(
+        vec![Portrait, Portrait, Landscape, Portrait],
+        ViewMode::TwoPage,
+        split(2),
+    )
+    .unwrap();
+    state.next_turn();
+    assert_eq!(
+        state.spread(),
+        Spread {
+            left: PageRef::new(2, PagePart::Right),
+            right: Some(PageRef::new(3, PagePart::Full)),
+        }
+    );
+}
+
+#[test]
+fn page_zero_leading_half_uses_page_and_turn_boundaries_differently() {
+    let start = Spread {
+        left: PageRef::new(0, PagePart::Right),
+        right: Some(PageRef::new(1, PagePart::Full)),
+    };
+
+    let mut state =
+        SpreadState::with_spread(vec![Landscape, Portrait], ViewMode::TwoPage, start).unwrap();
+    state.prev_page();
+    assert_eq!(state.spread(), start, "previous page at page 0 is a no-op");
+
+    for pages in [
+        vec![Landscape, Portrait],
+        vec![Landscape, Portrait, Portrait],
+    ] {
+        let mut state = SpreadState::with_spread(pages, ViewMode::TwoPage, start).unwrap();
+        state.prev_turn();
+        assert_eq!(
+            state.spread(),
+            Spread {
+                left: PageRef::new(0, PagePart::Left),
+                right: Some(PageRef::new(0, PagePart::Right)),
+            },
+            "previous turn at page 0 returns to the first spread"
+        );
+    }
+}
+
+#[test]
 fn mode_switch_uses_edge_rules_and_keeps_the_current_page() {
     let pages = vec![Portrait, Landscape, Portrait, Portrait];
     let mut state = SpreadState::new(pages.clone(), ViewMode::TwoPage).unwrap();

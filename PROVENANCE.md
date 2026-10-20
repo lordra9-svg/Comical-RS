@@ -66,6 +66,11 @@ analysis document, C++ harness or Bloks memory file was read.
   `comical-core` from `spec/behavior.md` and `tests/vectors/` only: spread
   state, navigation, zoom, fit and oversize. Added serde and serde_json as
   test-only dependencies for reading the supplied vectors.
+- 2026-10-20: Builder (clean-room subagent) fixed M2 review findings in
+  `comical-core` from the updated `spec/behavior.md` sections 4.6 through 4.8
+  and 5.2 through 5.4 plus the updated vectors: boundary guards for turns and
+  page steps, height oversize halving, square scrollbar width, neighbor
+  gating, and truncation points.
 
 ## AI caveat
 
