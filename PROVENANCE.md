@@ -77,7 +77,7 @@ analysis document, C++ harness or Bloks memory file was read.
   layout and zoom, testing, runbook and roadmap. No product code was edited.
   The docs contain no original source text, identifiers or line references.
 
-## AI caveat
+- 2026-10-20: Spec author acted as oracle runner for the image-filter vectors. A\n  dirty-side harness outside this repository ran the original resize behavior\n  on a synthetic 17x11 RGB image. Only source bytes, parameters and SHA-256\n  hashes were exported to `tests/vectors/images.json`. The harness is not in\n  this repository. No product code was edited.\n\n## AI caveat
 
 Clean-room doctrine was built for people. Model weights are not auditable. A
 separate session with no access to the source is the best available

@@ -7,7 +7,7 @@ Vectors are data. They contain no reference code.
 The current spread and zoom vectors are seed vectors, derived from
 `spec/behavior.md`. They are not yet confirmed against the 0.8 binary. Mark new
 vectors with `"status": "oracle-confirmed"` only after the oracle runner
-records them.
+records them. `images.json` is oracle-confirmed and marked as such.
 
 ## Spreads
 
@@ -39,8 +39,18 @@ the screen left. Test that separately.
 
 ## Images
 
-`images.json` will hold input hashes, filter, target size and output hashes.
-The oracle runner fills it. Do not put reference code here.
+`images.json` is oracle-confirmed. It contains:
+
+- `source`: `width`, `height`, `pixel_rule`, `rgb_hex` and `rgb_sha256`.
+  `rgb_hex` is row-major RGB8, three bytes per pixel, with no alpha.
+- `cases`: `name`, `filter`, `target` (`width`, `height`) and `output_sha256`.
+
+Filters are `box`, `bicubic`, `bilinear`, `bspline`, `catmull_rom` and
+`lanczos3`. The test reconstructs the source from `rgb_hex`, resizes to the
+target with the named filter, and hashes the raw RGB8 output. Hashes are exact.
+
+The vectors cover a 17x11 source, all six filters, scales from 0.1 to 2.0, odd
+dimensions and both pass orders. The oracle harness is not in this repository.
 
 ## UI
 

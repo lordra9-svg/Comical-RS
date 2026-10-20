@@ -1,6 +1,392 @@
 {
   "spec": "spec-v1",
-  "status": "empty, pending oracle",
-  "notes": "The oracle runner fills this file with input hashes, filter, target size and output hashes. Do not put reference code here.",
-  "cases": []
+  "status": "oracle-confirmed",
+  "notes": "Golden vectors recorded from a dirty-side original resize harness. Only input bytes, parameters and output hashes are exported. The harness is not part of this repository.",
+  "source": {
+    "width": 17,
+    "height": 11,
+    "pixel_rule": "r=(x*37+y*17+3)%256; g=(x*11+y*53+7)%256; b=(x*97+y*29+19)%256",
+    "rgb_hex": "0307132812744d1dd5722836973397bc3ef8e149590654ba2b5f1b506a7c7575dd9a803ebf8b9fe4960009a1612eacc253b723143c303947915e52f2835d53a868b4cd7315f27e761789d73c9438619f9986aafaabb55bd0c0bcf5cb1d1ad67e3fe1df64ec4025714d4a7cae6f870f949270b99dd1dea83203b39328bef44dc95572d4b697df17bcea78e1f5d906003a2b0b9b5016fc75215d36a66a5bb1cb80bc2ca5c78dcad2eeefdd4f14e8b039f3115efe728309d3a81434cd1f95f22af61735573c40b8614b1986567a47db876ce6e891f149b6fcaadb070b00126c251dcd4a282e6f338f943ef0b94951de54b2035f13286a744d75d5728036978b975810a47d1b05a22666c731c7ec3c281147893652ea5b5d4b8068aca5730dca7e6eef89cf149430399f915eaaf283b553a8c0b46945c18e5022b35b83d866e4fd7145227ca64787076c9268919dc9b6a82adbb38b00beec25c94d4ad4ae6fdf0f94ea70b9f5d17a7ade9f853fc490a0e99b010ea66233b1c358bc247dc785a2d2e6c7dd47ece8a811f30936fe6a5b09cb80142ca51f8dca2aee8baffbb0ba5cd5c5bdfad01e1fdb7f44e6e069f1418efca2b30703d81264fd1dc52228264733876c3ee8914949b654aadb5f0b9ce418c1ef79e6fada0b053b30109c551bfd7a265e9f31bfc43c20e947810e52e2335d435868a47d7305a27e66c789c7ec9428ad1935d22496f72ff71c3a584145b966501a8b5b7bb066dcd5713dfa7c9e1f87ff449260699dc18ea822b3b383d8bee4fdc945",
+    "rgb_sha256": "4758f7a9b2ecd2a47c4fb36290d3dac94d472c7d3032280d48090136a30086db"
+  },
+  "cases": [
+    {
+      "name": "box-0.1",
+      "filter": "box",
+      "target": {
+        "width": 1,
+        "height": 1
+      },
+      "output_sha256": "0032b4cd9c14d8afd204f3a1f0bca5ba26b5623f5dbbdb2265f47b9bd8dffaef"
+    },
+    {
+      "name": "box-0.25",
+      "filter": "box",
+      "target": {
+        "width": 4,
+        "height": 2
+      },
+      "output_sha256": "c2e12a5899a1f030444b9871cd8439dcb6a6f6c167a138a35641c39f2469c514"
+    },
+    {
+      "name": "box-0.5",
+      "filter": "box",
+      "target": {
+        "width": 8,
+        "height": 5
+      },
+      "output_sha256": "03d8a8a362df958e06f695447f3a5db74a6393693830c00c5d53a6a23a30d982"
+    },
+    {
+      "name": "box-0.75",
+      "filter": "box",
+      "target": {
+        "width": 12,
+        "height": 8
+      },
+      "output_sha256": "c39fb16d64e69aed49523b74fbdc1f8add2ec0f516981c277fe6705676246784"
+    },
+    {
+      "name": "box-1.0",
+      "filter": "box",
+      "target": {
+        "width": 17,
+        "height": 11
+      },
+      "output_sha256": "4758f7a9b2ecd2a47c4fb36290d3dac94d472c7d3032280d48090136a30086db"
+    },
+    {
+      "name": "box-1.3",
+      "filter": "box",
+      "target": {
+        "width": 22,
+        "height": 14
+      },
+      "output_sha256": "73f9ed2611dbab4c54d84375396bbebdcf16191e6262878f5faf68704004f479"
+    },
+    {
+      "name": "box-2.0",
+      "filter": "box",
+      "target": {
+        "width": 34,
+        "height": 22
+      },
+      "output_sha256": "d0744d669875520fcf22ccada52f299d3e1df67c3b04b22321ddd65c5bd2f935"
+    },
+    {
+      "name": "bicubic-0.1",
+      "filter": "bicubic",
+      "target": {
+        "width": 1,
+        "height": 1
+      },
+      "output_sha256": "d0fe17836181b62393d7ac1a86a92c30b8601055098bf506c58f2ea4f3b83b5e"
+    },
+    {
+      "name": "bicubic-0.25",
+      "filter": "bicubic",
+      "target": {
+        "width": 4,
+        "height": 2
+      },
+      "output_sha256": "99a42ced5559d427495f2e93d6131f28e7c4c80bf26b1b23d7d1820263f88514"
+    },
+    {
+      "name": "bicubic-0.5",
+      "filter": "bicubic",
+      "target": {
+        "width": 8,
+        "height": 5
+      },
+      "output_sha256": "cebfb3adbdee87e2ee2c382e8493486380e1403da0d92861af422a05e6b8a2f0"
+    },
+    {
+      "name": "bicubic-0.75",
+      "filter": "bicubic",
+      "target": {
+        "width": 12,
+        "height": 8
+      },
+      "output_sha256": "491a7aea03e186ae52088445632cf83dee933944c1dcc407eb591c29d01e0434"
+    },
+    {
+      "name": "bicubic-1.0",
+      "filter": "bicubic",
+      "target": {
+        "width": 17,
+        "height": 11
+      },
+      "output_sha256": "8ebe7dda071fcfb4c32af267760eff1017e0c050d5d73801c8aa9f2c431c0a8f"
+    },
+    {
+      "name": "bicubic-1.3",
+      "filter": "bicubic",
+      "target": {
+        "width": 22,
+        "height": 14
+      },
+      "output_sha256": "f0092049e0107a9f91291e0c2ce91162f2e1bd824dfbe87041b31b972b817c9f"
+    },
+    {
+      "name": "bicubic-2.0",
+      "filter": "bicubic",
+      "target": {
+        "width": 34,
+        "height": 22
+      },
+      "output_sha256": "ae7be57f7385ac22bcc7c907280c7fbace8cd72ac38bd1fdef536f771ff1d88c"
+    },
+    {
+      "name": "bilinear-0.1",
+      "filter": "bilinear",
+      "target": {
+        "width": 1,
+        "height": 1
+      },
+      "output_sha256": "8e7a671db5db42213e93ddb66c44165e8df26879fa1ae5c3bdcf9ca4ba4bdf64"
+    },
+    {
+      "name": "bilinear-0.25",
+      "filter": "bilinear",
+      "target": {
+        "width": 4,
+        "height": 2
+      },
+      "output_sha256": "7b34bda291d8d354304700ddb9a00af92a719ac7b740ae95ec67fc595b07daea"
+    },
+    {
+      "name": "bilinear-0.5",
+      "filter": "bilinear",
+      "target": {
+        "width": 8,
+        "height": 5
+      },
+      "output_sha256": "2d72a5539b3a4da0ff5ff9171873233afe303f16a7bd5aadc1797fbd3508544e"
+    },
+    {
+      "name": "bilinear-0.75",
+      "filter": "bilinear",
+      "target": {
+        "width": 12,
+        "height": 8
+      },
+      "output_sha256": "831061b9fc12801061486f0eb30a4aa98aa2c7c8806737e3130736394446a3f7"
+    },
+    {
+      "name": "bilinear-1.0",
+      "filter": "bilinear",
+      "target": {
+        "width": 17,
+        "height": 11
+      },
+      "output_sha256": "4758f7a9b2ecd2a47c4fb36290d3dac94d472c7d3032280d48090136a30086db"
+    },
+    {
+      "name": "bilinear-1.3",
+      "filter": "bilinear",
+      "target": {
+        "width": 22,
+        "height": 14
+      },
+      "output_sha256": "32997269ce483b5b4b106d9c108690b79ddb5c88ac90b1166f51c60ab3d4575f"
+    },
+    {
+      "name": "bilinear-2.0",
+      "filter": "bilinear",
+      "target": {
+        "width": 34,
+        "height": 22
+      },
+      "output_sha256": "d0744d669875520fcf22ccada52f299d3e1df67c3b04b22321ddd65c5bd2f935"
+    },
+    {
+      "name": "bspline-0.1",
+      "filter": "bspline",
+      "target": {
+        "width": 1,
+        "height": 1
+      },
+      "output_sha256": "0c48df7751f914a173abb389cf42ff401c59de54c9c7d238ffa627a1b2d891a6"
+    },
+    {
+      "name": "bspline-0.25",
+      "filter": "bspline",
+      "target": {
+        "width": 4,
+        "height": 2
+      },
+      "output_sha256": "dce47d54adae4434902194595dc2348b1823dd3e90d5cef2355da576e86310c4"
+    },
+    {
+      "name": "bspline-0.5",
+      "filter": "bspline",
+      "target": {
+        "width": 8,
+        "height": 5
+      },
+      "output_sha256": "8aad5800e88dbc95878e0c64a26ff8e33f46de6e3d20627f8fa9f15bbe8e1bfc"
+    },
+    {
+      "name": "bspline-0.75",
+      "filter": "bspline",
+      "target": {
+        "width": 12,
+        "height": 8
+      },
+      "output_sha256": "97e0a3af1778b74c32da57078bc2d6143986ab4250e6708b40a1636310dd25ec"
+    },
+    {
+      "name": "bspline-1.0",
+      "filter": "bspline",
+      "target": {
+        "width": 17,
+        "height": 11
+      },
+      "output_sha256": "d0f242f0eeceb5fb090c2471b5a0c8fd5b88ef7decf667961d6b58ad01cd173e"
+    },
+    {
+      "name": "bspline-1.3",
+      "filter": "bspline",
+      "target": {
+        "width": 22,
+        "height": 14
+      },
+      "output_sha256": "90043b3e6e0e8df69d3484e71771e32f25d27c5e8155b72e1b93abdb7f27ca45"
+    },
+    {
+      "name": "bspline-2.0",
+      "filter": "bspline",
+      "target": {
+        "width": 34,
+        "height": 22
+      },
+      "output_sha256": "494d016bfae84895f075884b1a6c301fd1f90dc382dab10dda5e47f502aca9d0"
+    },
+    {
+      "name": "catmull_rom-0.1",
+      "filter": "catmull_rom",
+      "target": {
+        "width": 1,
+        "height": 1
+      },
+      "output_sha256": "7dfa52309890a06c8cf579b578f5186e24d8b5c4d17ef4c022b555758eac3f4e"
+    },
+    {
+      "name": "catmull_rom-0.25",
+      "filter": "catmull_rom",
+      "target": {
+        "width": 4,
+        "height": 2
+      },
+      "output_sha256": "e8fb16a092bf19edaa681deea77d9c7b3c24dc40709969660e7f547bfd4ae598"
+    },
+    {
+      "name": "catmull_rom-0.5",
+      "filter": "catmull_rom",
+      "target": {
+        "width": 8,
+        "height": 5
+      },
+      "output_sha256": "81bd53b7407880625d77e5f1214455c67c6dd5a5086846e71be66e2ef5ed77ff"
+    },
+    {
+      "name": "catmull_rom-0.75",
+      "filter": "catmull_rom",
+      "target": {
+        "width": 12,
+        "height": 8
+      },
+      "output_sha256": "481ef1901daf9d264bbb266890cda55e743c469909669ce78a024d4541069a69"
+    },
+    {
+      "name": "catmull_rom-1.0",
+      "filter": "catmull_rom",
+      "target": {
+        "width": 17,
+        "height": 11
+      },
+      "output_sha256": "4758f7a9b2ecd2a47c4fb36290d3dac94d472c7d3032280d48090136a30086db"
+    },
+    {
+      "name": "catmull_rom-1.3",
+      "filter": "catmull_rom",
+      "target": {
+        "width": 22,
+        "height": 14
+      },
+      "output_sha256": "d3acf83290a94a6c0075394e4d1da44dd4703b1154aee0373f950694e6cfc455"
+    },
+    {
+      "name": "catmull_rom-2.0",
+      "filter": "catmull_rom",
+      "target": {
+        "width": 34,
+        "height": 22
+      },
+      "output_sha256": "1bc00c125520fa50012c165f05292600be98163206efd00e1167bac929264788"
+    },
+    {
+      "name": "lanczos3-0.1",
+      "filter": "lanczos3",
+      "target": {
+        "width": 1,
+        "height": 1
+      },
+      "output_sha256": "a17d08a101e721edbe79145767b7b48b5525cafc3847d23be939a7332675f561"
+    },
+    {
+      "name": "lanczos3-0.25",
+      "filter": "lanczos3",
+      "target": {
+        "width": 4,
+        "height": 2
+      },
+      "output_sha256": "b1c109a4d0e52259f2a31e751b57dff1329cb5877cf75c8be435f79214c0d687"
+    },
+    {
+      "name": "lanczos3-0.5",
+      "filter": "lanczos3",
+      "target": {
+        "width": 8,
+        "height": 5
+      },
+      "output_sha256": "16eac23e1ca2116a5a33bd8addaa3ba061d94bee3e2122ab21daee3e497e76b4"
+    },
+    {
+      "name": "lanczos3-0.75",
+      "filter": "lanczos3",
+      "target": {
+        "width": 12,
+        "height": 8
+      },
+      "output_sha256": "d2db5b49584c5a44b17945d8a4331ec07050f8c060be038dc84d8028322fa439"
+    },
+    {
+      "name": "lanczos3-1.0",
+      "filter": "lanczos3",
+      "target": {
+        "width": 17,
+        "height": 11
+      },
+      "output_sha256": "4758f7a9b2ecd2a47c4fb36290d3dac94d472c7d3032280d48090136a30086db"
+    },
+    {
+      "name": "lanczos3-1.3",
+      "filter": "lanczos3",
+      "target": {
+        "width": 22,
+        "height": 14
+      },
+      "output_sha256": "26b62fd28a0ad4bb1692985e0ea0ec7d91088402504067f824f0a10a46665429"
+    },
+    {
+      "name": "lanczos3-2.0",
+      "filter": "lanczos3",
+      "target": {
+        "width": 34,
+        "height": 22
+      },
+      "output_sha256": "fea69d4ee247690de32f4d5e9abdca6ce1eb04b128ef73afaa6f24b3c4a739dd"
+    }
+  ]
 }

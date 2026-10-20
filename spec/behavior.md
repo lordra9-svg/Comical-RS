@@ -269,6 +269,10 @@ For each destination pixel and axis:
 - Normalize weights so they sum to 1.
 - Round the accumulated value with `+0.5`, truncate, clamp to 0..255.
 
+Evaluate polynomial kernels in nested form, for example Mitchell
+`p0 + x*x*(p2 + x*p3)`. Do not use `pow`. Evaluation order can change the last
+bit, and the image vectors are exact hashes.
+
 Kernels and support:
 
 | Filter | Support | Kernel |
