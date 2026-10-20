@@ -96,15 +96,16 @@ This gives book-cover behavior: the first page sits on the left, the last page o
 
 A turn advances by a spread.
 
+- If the right page is absent, show the last spread.
+- If the right page is the last page, or the penultimate page and not its left half, show the last spread.
 - If the right page is the left half of a landscape page: keep that page, move it to the left as its right half, and put the next page on the right, using its left half if landscape, otherwise full.
 - Otherwise: construct a new spread starting at the page after the current right page.
-
-At the end of the book, stay on the last spread.
 
 ### 4.7 Previous turn
 
 A turn retreats by a spread.
 
+- If the left page is page 0, or page 1 and not its right half, show the first spread.
 - If the left page is the right half of a landscape page: keep that page, move it to the right as its left half, and put the previous page on the left, using its right half if landscape, otherwise full.
 - If the result would fall before page 0, show the first spread.
 - Otherwise: let `q` be the page before the current left page.
@@ -118,9 +119,12 @@ The turn operations are not always algebraic inverses at the boundaries. Use the
 These move by one page rather than one spread.
 
 - Next page:
+  - If the left page is the last page, do nothing.
+  - If the left page is the penultimate page and not its left half, show the last spread.
   - If the right page is the left half of a landscape page: show both halves of that same page in the spread.
   - Otherwise: shift the window one page forward. The old right page becomes the new left page, full or right half as it was. The next page becomes the new right page, using its left half if landscape, otherwise full.
 - Previous page:
+  - If the left page is page 0, do nothing.
   - If the left page is the right half of a landscape page: show both halves of that same page in the spread.
   - Otherwise: shift the window one page backward. The old left page becomes the new right page, using its left half if landscape, otherwise full. The previous page becomes the new left page, using its right half if landscape, otherwise full.
 
@@ -201,8 +205,8 @@ If fit-only-if-oversized is enabled and the page is not oversized, scale = 1. Ot
 - If `scale * h` is not greater than `canvas_h`: keep it. No scrollbars.
 - Otherwise:
   - Set `scale = canvas_h / h`.
-  - Let `scrollbar_width = canvas_w - sb`, halved with integer division for portrait pages in two-page mode.
-  - If `scale * w` is greater than `scrollbar_width`: keep this height-fit scale. It is the larger of the two, so the page fits fully.
+  - Let `scrollbar_width = canvas_w - sb`, halved with integer division when the page is not wide for scaling and the mode is two-page. A square page uses the full scrollbar width.
+  - If `int(scale * w)` is greater than `scrollbar_width`: keep this height-fit scale. It is the larger of the two, so the page fits fully.
   - Otherwise: set `scale = scrollbar_width / w`. The page fills the width and needs a vertical scrollbar.
 
 In two-page mode, if this page uses the height-fit scale, check both neighbors. If either neighbor would use the scrollbar-present scale, use the scrollbar-present scale for this page.
@@ -213,7 +217,7 @@ Symmetric to fit width:
 
 - Start with `scale = canvas_h / h`.
 - Let `usable width = canvas_w` when the page is wide for scaling or single-page mode, otherwise `canvas_w / 2`, integer division.
-- If `scale * w` is not greater than the usable width: keep it. No scrollbars.
+- If `int(scale * w)` is not greater than the usable width: keep it. No scrollbars.
 - Otherwise:
   - Set `scale = usable width / w`.
   - Let `scrollbar_height = canvas_h - sb`.
@@ -232,7 +236,7 @@ Used by fit-only-if-oversized. Compare oriented original size with the usable ar
 | Height | `canvas_w` | `canvas_h - sb` or half |
 | Full, Custom | always oversized | always oversized |
 
-"Half" applies to portrait pages in two-page mode. A square page counts as portrait here, even though it uses full width for scaling. This is a 0.8 quirk; match it or record a divergence.
+"Half" applies to portrait pages in two-page mode. A square page counts as portrait here, even though it uses full width for scaling. This is a 0.8 quirk; match it or record a divergence. For the Height row, halve the usable height, not the width.
 
 ### 5.5 Full and custom
 

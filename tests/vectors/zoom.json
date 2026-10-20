@@ -189,6 +189,76 @@
       "zoom_percent": 100,
       "fit_only_oversize": true,
       "expected": {"scale": 1.1428571429, "width": 400, "height": 400}
+    },
+    {
+      "name": "two-page-square-width",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 1000, "height": 1000},
+      "zoom": "width",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.585, "width": 585, "height": 585}
+    },
+    {
+      "name": "two-page-portrait-height-oversize",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 250, "height": 300},
+      "zoom": "height",
+      "zoom_percent": 100,
+      "fit_only_oversize": true,
+      "expected": {"scale": 1.2833333333, "width": 320, "height": 385}
+    },
+    {
+      "name": "two-page-width-neighbor-scrollbar",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 300, "height": 400},
+      "zoom": "width",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "neighbors": [{"width": 1400, "height": 1000}],
+      "expected": {"scale": 0.9733333333, "width": 292, "height": 389}
+    },
+    {
+      "name": "two-page-width-neighbor-no-scrollbar",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 300, "height": 400},
+      "zoom": "width",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "neighbors": [{"width": 300, "height": 400}],
+      "expected": {"scale": 1.0, "width": 300, "height": 400}
+    },
+    {
+      "name": "two-page-height-neighbor-scrollbar",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 300, "height": 300},
+      "zoom": "height",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "neighbors": [{"width": 2000, "height": 1000}],
+      "expected": {"scale": 1.2833333333, "width": 385, "height": 385}
+    },
+    {
+      "name": "two-page-height-neighbor-no-scrollbar",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 300, "height": 300},
+      "zoom": "height",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "neighbors": [{"width": 300, "height": 300}],
+      "expected": {"scale": 1.3333333333, "width": 400, "height": 400}
     }
   ]
 }

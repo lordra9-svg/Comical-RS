@@ -34,6 +34,7 @@ the screen left. Test that separately.
 - `zoom`: `fit`, `width`, `height`, `full`, or `custom`.
 - `zoom_percent`: used by `custom`.
 - `fit_only_oversize`: boolean.
+- `neighbors`: optional array of page sizes that share the two-page layout. Used by fit-width and fit-height neighbor checks.
 - `expected`: `scale` with tolerance, and integer `width` and `height`.
 
 ## Images
