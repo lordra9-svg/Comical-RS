@@ -76,14 +76,13 @@ pub fn write_zip(
     Ok(())
 }
 
-/// Writes a stored RAR 4.0 archive.
+/// Writes a RAR 4.0 archive with the writer's default compression.
 pub fn write_rar(
     path: &Path,
     entries: &[FixtureEntry<'_>],
     password: Option<&str>,
 ) -> Result<(), Box<dyn Error>> {
     let mut builder = rars::Builder::new(rars::ArchiveVersion::Rar40)
-        .store(true)
         .password(password.map(|value| value.as_bytes().to_vec()));
     for entry in entries {
         builder.add_bytes(
