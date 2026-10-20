@@ -1,0 +1,59 @@
+# Implementation documentation
+
+This directory describes the code as it exists today. It is separate from
+`spec/behavior.md`, which is the behavior contract.
+
+Use these documents when you need to change, debug or review the implementation,
+or when you need to know which file owns a behavior.
+
+## Source of truth
+
+| Question | Authoritative source |
+|---|---|
+| What should the viewer do? | `spec/behavior.md` |
+| What does the code do now? | The code and these documents |
+| What are the expected spread and zoom outputs? | `tests/vectors/` |
+| What is allowed in this repository? | `CLEANROOM.md`, `PROVENANCE.md` |
+| What licenses apply? | `LICENSE`, `THIRD_PARTY_LICENSES.md` |
+
+If a document and the code disagree, treat the code as current behavior and the
+behavior spec as the intended behavior. Record the difference before changing
+either one.
+
+## Reading order
+
+1. `architecture.md`: crate boundaries, data flow and design rules.
+2. `code-map.md`: every file, its symbols and the tests that protect it.
+3. `core.md`: spread state and zoom math in detail.
+4. `archive.md`: ZIP, RAR, 7z and directory readers in detail.
+5. `testing.md`: test layers, fixtures and vectors.
+6. `runbook.md`: build, diagnose, change and release procedures.
+7. `roadmap.md`: placeholders, planned milestones and known gaps.
+
+## Status
+
+The repository currently contains the M1 archive slice and the M2 core slice.
+`comical-image` and `comical-app` are placeholders. There is no UI, no image
+decoder and no resampler yet.
+
+## Documentation rules
+
+- Write about this repository only. Do not add notes from forbidden material.
+- Use the public names in the code, not names from any other implementation.
+- Update the code map when a file, public type or ownership boundary changes.
+- Update the runbook when a command or dependency changes.
+- Keep behavior details in `spec/behavior.md`, not duplicated here. Link to it.
+- Mark planned work as planned. Do not describe it as implemented.
+
+## Quick commands
+
+```text
+cargo test --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo run -p xtask -- target/fixtures
+cargo run -p comical-cli -- probe target/fixtures/sample.cbz
+cargo run -p comical-cli -- extract target/fixtures/sample.cbz 0 target/page.bin
+```
+
+If `cargo` is not found, prepend `%USERPROFILE%\.cargo\bin` to `PATH`.

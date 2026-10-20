@@ -72,6 +72,11 @@ analysis document, C++ harness or Bloks memory file was read.
   page steps, height oversize halving, square scrollbar width, neighbor
   gating, and truncation points.
 
+- 2026-10-20: Spec author wrote the `docs/` implementation documentation from
+  the clean repository only: architecture, code map, archive internals, core
+  layout and zoom, testing, runbook and roadmap. No product code was edited.
+  The docs contain no original source text, identifiers or line references.
+
 ## AI caveat
 
 Clean-room doctrine was built for people. Model weights are not auditable. A

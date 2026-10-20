@@ -42,6 +42,7 @@ Pass `--password <value>` for encrypted ZIP AES-256, RAR data or headers, and
 ```
 spec/                  behavior specification
 tests/vectors/         expected outputs, no reference code
+docs/                  implementation documentation and maintenance runbook
 crates/                product crates
   comical-core/        shared domain types
   comical-archive/     read-only ZIP, RAR, 7z and directory access
@@ -51,20 +52,28 @@ crates/                product crates
 xtask/                 synthetic archive fixture generator
 ```
 
+Implementation details, file ownership and the maintenance runbook start at
+`docs/README.md`.
+
 ## Toolchain
 
 - Rust 1.99.1 with the GNU host is installed.
 - Add `%USERPROFILE%\.cargo\bin` to `PATH` in a new shell if `cargo` is not found.
 - CMake and Ninja are optional.
-- `cargo-nextest`, `cargo-deny`, `cargo-fuzz` are optional at M0.5.
+- `cargo-nextest`, `cargo-deny`, `cargo-fuzz` are optional.
 
 ## Milestones
 
 1. ~~Scaffold the Cargo workspace.~~
 2. ~~Implement `comical-cli probe <book>` and `extract` for ZIP, RAR and 7z.~~
 3. ~~Implement the spread state machine and zoom math in `comical-core`.~~
-4. Image decoding and the UI come next.
-5. Add `Clean-Room: spec-v1` to every commit.
+4. Image decoding, rotation and filters.
+5. Minimal desktop UI.
+6. Cross-platform CI and a real archive corpus.
+7. Packaging and release review.
+8. Add `Clean-Room: spec-v1` to every commit.
+
+See `docs/roadmap.md` for the current plan and open decisions.
 
 ## License
 
