@@ -385,12 +385,12 @@ Optional one-time migration from old Comical settings is allowed, but the new ap
 
 ## 12. Archive behavior
 
-- ZIP: store and deflate, ZIP64, ZipCrypto and AES-256 if supported. Decode names with the UTF-8 flag, otherwise CP437.
-- RAR: RAR 1.4 through 7, solid and encrypted. Read-only.
+- ZIP: store and deflate, ZIP64, ZipCrypto and AES-256. Decode names with the UTF-8 flag, otherwise CP437.
+- RAR: RAR 1.4 through 7, solid and encrypted, including encrypted headers. Read-only.
 - 7z: LZMA, LZMA2, BCJ, Delta, solid and AES-256. Read-only.
 - Directory: recursive, same filter and sort.
 - Never write to the archive or extract to disk.
-- Multi-volume archives are out of scope for v1 unless the reader supports them without special cases.
+- Multi-volume archives are out of scope for v1. Reject them as unsupported. Never return an incomplete page list.
 
 ## 13. Acceptance
 

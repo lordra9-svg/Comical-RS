@@ -58,6 +58,10 @@ analysis document, C++ harness or Bloks memory file was read.
 - 2026-10-20: Builder (clean-room subagent) extended M1 archive coverage using
   the same allowed sources: RAR 1.4 through 7, solid and encrypted RAR, AES-256
   7z, CP437 ZIP names, and explicit multi-volume rejection.
+- 2026-10-20: Spec author reviewed M1. Read the clean code, ran `cargo fmt`,
+  `cargo test` and `cargo clippy`, checked the dependency license inventory and
+  updated the spec, notices and access log. No product code was edited by the
+  spec author.
 
 ## AI caveat
 
