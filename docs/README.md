@@ -13,6 +13,7 @@ or when you need to know which file owns a behavior.
 | What should the viewer do? | `spec/behavior.md` |
 | What does the code do now? | The code and these documents |
 | What are the expected spread and zoom outputs? | `tests/vectors/` |
+| What are the expected image filter outputs? | `tests/vectors/images.json` |
 | What is allowed in this repository? | `CLEANROOM.md`, `PROVENANCE.md` |
 | What licenses apply? | `LICENSE`, `THIRD_PARTY_LICENSES.md` |
 
@@ -26,15 +27,15 @@ either one.
 2. `code-map.md`: every file, its symbols and the tests that protect it.
 3. `core.md`: spread state and zoom math in detail.
 4. `archive.md`: ZIP, RAR, 7z and directory readers in detail.
-5. `testing.md`: test layers, fixtures and vectors.
-6. `runbook.md`: build, diagnose, change and release procedures.
-7. `roadmap.md`: placeholders, planned milestones and known gaps.
+5. `image.md`: decode, rotation, filters and golden hashes.
+6. `testing.md`: test layers, fixtures and vectors.
+7. `runbook.md`: build, diagnose, change and release procedures.
+8. `roadmap.md`: placeholders, planned milestones and known gaps.
 
 ## Status
 
-The repository currently contains the M1 archive slice and the M2 core slice.
-`comical-image` and `comical-app` are placeholders. There is no UI, no image
-decoder and no resampler yet.
+The repository contains the M1 archive slice, the M2 core slice and the M3 image
+slice. `comical-app` is still a placeholder. There is no UI yet.
 
 ## Documentation rules
 
@@ -49,6 +50,7 @@ decoder and no resampler yet.
 
 ```text
 cargo test --workspace
+cargo test -p comical-image
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p xtask -- target/fixtures

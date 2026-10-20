@@ -1,6 +1,6 @@
 # Testing
 
-The repository has 46 tests at the M2 slice. Tests are layered so a failure
+The repository has 63 tests at the M3 slice. Tests are layered so a failure
 points to one subsystem.
 
 ## Commands
@@ -9,6 +9,7 @@ points to one subsystem.
 cargo test --workspace
 cargo test -p comical-core
 cargo test -p comical-archive
+cargo test -p comical-image
 cargo test -p comical-cli
 cargo test -p comical-archive zip_
 cargo test -p comical-core spread_vectors_match -- --nocapture
@@ -28,10 +29,12 @@ same gate.
 | Core vectors | `comical-core/tests/vectors.rs` | 2 | Every spread and zoom JSON case |
 | Core generated spreads | `comical-core/tests/spreads_generated.rs` | 6 | N = 1..12 invariants, boundaries, mode switches |
 | Core generated zoom | `comical-core/tests/zoom_generated.rs` | 8 | Orientations, modes, quirks, neighbors |
+| Image decode | `comical-image/tests/decode.rs` | 7 | PNG, RGBA alpha, JPEG, GIF, bad input |
+| Image golden filters | `comical-image/tests/images.rs` | 1 | All 42 oracle hashes |
+| Image transforms | `comical-image/tests/transform.rs` | 9 | Rotations, targets, buffer invariants |
 | CLI end-to-end | `comical-cli/tests/cli.rs` | 8 | Probe/extract, output format, passwords, errors |
 
-The `comical-image` and `comical-app` crates have no tests because they have no
-implementation yet.
+`comical-app` has no tests because it has no implementation yet.
 
 ## Archive tests
 
@@ -59,6 +62,35 @@ Coverage:
 
 What is not proven: real archives from other writers, unusual codecs, damaged
 headers that still parse, very large books, concurrent reads.
+
+## Image tests
+
+`comical-image` has three test files.
+
+`tests/decode.rs` covers:
+
+- PNG RGB exact pixels.
+- PNG RGBA with alpha ignored, including zero alpha.
+- JPEG dimensions and approximate color.
+- GIF first frame only.
+- Empty, garbage and truncated input.
+
+`tests/images.rs` is the golden test. It reads
+`tests/vectors/images.json`, reconstructs the 17x11 source from `rgb_hex`,
+resizes every case and compares SHA-256 of the raw RGB8 output. It asserts all
+42 cases and runs in debug and release.
+
+`tests/transform.rs` covers:
+
+- All four rotations with known pixels.
+- Four 90-degree turns return the source.
+- Zero target width and height.
+- Buffer length and zero image dimensions.
+- Resize target validation.
+
+What is not proven: real-world JPEG, PNG and GIF files, EXIF orientation,
+animated GIF, ICC profiles, color conversion, very large images, fuzzed
+decoders.
 
 ## CLI tests
 
@@ -129,6 +161,31 @@ neighbors, then assert scale within `1e-6` and exact integer dimensions.
 `neighbors` is optional. `zoom` is `fit`, `width`, `height`, `full` or `custom`.
 `mode` is `one_page` or `two_page`.
 
+### Image case schema
+
+```json
+{
+  "source": {
+    "width": 17,
+    "height": 11,
+    "rgb_hex": "row-major RGB8 bytes",
+    "rgb_sha256": "source hash"
+  },
+  "cases": [
+    {
+      "name": "catmull_rom-0.5",
+      "filter": "catmull_rom",
+      "target": {"width": 8, "height": 5},
+      "output_sha256": "raw RGB8 output hash"
+    }
+  ]
+}
+```
+
+`filter` is `box`, `bilinear`, `bicubic`, `bspline`, `catmull_rom` or
+`lanczos3`. Hashes are exact. The test reconstructs the source, resizes and
+hashes the output. Do not regenerate vectors from the Rust implementation.
+
 ## Fixtures
 
 `xtask` writes synthetic archives:
@@ -187,6 +244,19 @@ The assertion prints the vector name and scale. Check:
 6. Square-page wide vs portrait behavior.
 
 Use exact numbers. A one-pixel difference is a real contract difference.
+
+### Image failure
+
+The assertion prints the case name. Check:
+
+1. Pass order for the target size.
+2. Source window and weight normalization.
+3. Nested cubic evaluation and the B-spline basis.
+4. Rounding after the first pass.
+5. The 1.0 case: do not shortcut equal dimensions.
+6. Alpha handling or GIF frame selection for decode tests.
+
+A one-byte difference is a real contract difference. Run debug and release.
 
 ### Archive failure
 

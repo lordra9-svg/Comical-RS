@@ -40,7 +40,9 @@ Focused:
 ```text
 cargo test -p comical-core
 cargo test -p comical-archive
+cargo test -p comical-image
 cargo test -p comical-cli
+cargo test -p comical-image --release
 ```
 
 Run the CLI:
@@ -74,6 +76,10 @@ cargo run -p xtask -- target/fixtures
 | Previous page at page 0 resets | Missing page-zero guard | `prev_page_two_page` | `comical-core/src/spread.rs` |
 | Zoom off by one | Truncation or integer division | `scaled_dimension`, fit base | `comical-core/src/zoom.rs` |
 | Scrollbar appears when not needed | Neighbor fallback too aggressive | neighbor tests | `comical-core/src/zoom.rs` |
+| Image hash mismatch | Pass order, window, nested kernel or rounding | `tests/images.rs` case | `comical-image/src/resize.rs` |
+| `unsupported image format` | Bytes are not PNG, JPEG or GIF | `guess_format` allowlist | `comical-image/src/decode.rs` |
+| `image is too large` | Header above 100M pixels or allocation failed | header dimensions, cap | `comical-image/src/decode.rs` |
+| Rotation wrong | Index mapping or direction | rotation test | `comical-image/src/rotate.rs` |
 | CLI output changed | Format string | `probe` | `comical-cli/src/main.rs` |
 
 Always reproduce first. Add a failing test before changing behavior.
@@ -121,6 +127,32 @@ If the cap changes:
 - Test a declared size over the cap and an actual read over the cap.
 - Consider a configurable limit for the UI later.
 
+## Change the image pipeline
+
+Follow `docs/image.md`.
+
+For decode:
+
+1. Keep the format allowlist in `decode`.
+2. Add the smallest `image` feature needed.
+3. Check header dimensions and the pixel cap before decode.
+4. Add a decode test and a bad-input test.
+5. Update `THIRD_PARTY_LICENSES.md`.
+
+For a filter:
+
+1. Add the variant and support.
+2. Implement the kernel with nested evaluation.
+3. Add oracle vectors for every scale.
+4. Run the golden test in debug and release.
+5. Do not shortcut equal source and target sizes.
+
+For rotation:
+
+1. Keep the mapping in `rotate`.
+2. Test all four states and four quarter turns.
+3. Update orientation tests if the direction convention changes.
+
 ## Password handling
 
 - Passwords are never persisted.
@@ -157,6 +189,15 @@ For `sevenz-rust`:
 3. Run 7z list, exact bytes, AES and corrupt tests.
 4. Re-check callback order and the name guard.
 5. Check the license.
+
+For `image`:
+
+1. Keep `default-features = false` and only `png`, `jpeg`, `gif`.
+2. Check `ImageReader`, `Limits`, format detection and `to_rgb8` alpha handling.
+3. Run the 42 golden hashes in debug and release.
+4. Check the pixel cap and allocation limit still apply before decode.
+5. Check `image` and its transitive licenses.
+6. Regenerate the license inventory with `cargo metadata` or `cargo tree`.
 
 After any upgrade, run the full workspace gate and a real-world corpus when one
 exists. Record the version change in `Cargo.lock` and `THIRD_PARTY_LICENSES.md`

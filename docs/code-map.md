@@ -21,7 +21,7 @@ tests that protect it. Use this as the starting point when tracing a failure.
 | `tests/vectors/spreads.json` | Spread state cases |
 | `tests/vectors/zoom.json` | Zoom and fit cases |
 | `tests/vectors/ui.json` | Seed right-to-left screen mapping cases |
-| `tests/vectors/images.json` | Empty image filter vector file, pending oracle |
+| `tests/vectors/images.json` | 42 oracle-confirmed filter cases and source bytes |
 
 ## Documentation
 
@@ -32,6 +32,7 @@ tests that protect it. Use this as the starting point when tracing a failure.
 | `docs/code-map.md` | This file |
 | `docs/core.md` | Spread state, zoom math, invariants and quirks |
 | `docs/archive.md` | Archive trait, formats, errors, caps and passwords |
+| `docs/image.md` | Decode, rotation, filters, golden hashes and image maintenance |
 | `docs/testing.md` | Test layers, fixtures, vector schemas and debugging |
 | `docs/runbook.md` | Build, diagnose, change and release procedures |
 | `docs/roadmap.md` | Placeholders, planned milestones and known gaps |
@@ -252,12 +253,39 @@ AES ZIP passwords, out-of-range indexes, corrupt input and write failures.
 
 ## `comical-image`
 
+Opaque RGB8 decode, quarter-turn rotation and six-filter resampling. It does not
+know about archives, spreads or UI.
+
 | File | Owns |
 |---|---|
-| `Cargo.toml` | Placeholder, no dependencies |
-| `src/lib.rs` | Placeholder only |
+| `Cargo.toml` | `image` with PNG, JPEG and GIF only; `thiserror`; test hashes |
+| `src/lib.rs` | `RgbImage`, buffer invariants and allocation helpers |
+| `src/decode.rs` | Format allowlist, header pixel cap, decode to RGB8 |
+| `src/error.rs` | `ImageError` variants and messages |
+| `src/rotate.rs` | `Rotation` and index-remapped quarter turns |
+| `src/resize.rs` | `Filter`, contributions, two passes and target validation |
+| `tests/decode.rs` | PNG RGB/RGBA, JPEG, GIF first frame and bad input |
+| `tests/images.rs` | All 42 golden filter hashes |
+| `tests/transform.rs` | Rotations, zero targets, buffer and dimension checks |
 
-Planned for M3: decode, rotation and resampling. See `roadmap.md`.
+Key public symbols:
+
+- `RgbImage`: validated constructor, dimensions, pixels, `pixel`.
+- `Rotation`: `None`, `Cw90`, `Cw180`, `Cw270`.
+- `Filter`: `Box`, `Bilinear`, `Bicubic`, `BSpline`, `CatmullRom`, `Lanczos3`.
+- `decode`, `rotate`, `resize`.
+- `ImageError`.
+- `MAX_DECODED_PIXELS`.
+
+Invariants:
+
+- `width > 0`, `height > 0`.
+- `pixels.len() == width * height * 3`.
+- Only RGB8 is exposed; alpha is dropped at decode.
+- Resize target sides are at least 1.
+- Decode and resize return errors instead of panicking on bad input.
+
+Details: `docs/image.md`.
 
 ## `comical-app`
 
@@ -303,6 +331,9 @@ into `comical-archive`.
 | Spread skips a page or turn | `comical-core/src/spread.rs` | `spreads_generated.rs` and vector case |
 | Zoom size off by one | `comical-core/src/zoom.rs` truncation and comparison | `zoom_generated.rs` |
 | Scrollbar reserved when it should not be | fit base and neighbor checks | neighbor tests |
+| Image filter hash mismatch | `comical-image/src/resize.rs` pass order, window, rounding | `tests/images.rs` |
+| Image decode fails | `comical-image/src/decode.rs` allowlist and limits | `tests/decode.rs` |
+| Rotation wrong | `comical-image/src/rotate.rs` index mapping | `tests/transform.rs` |
 | CLI output format changed | `comical-cli/src/main.rs` | `tests/cli.rs` |
 | Fixture writer wrong | `xtask/src/lib.rs` | integration test using it |
 | Licensing question | `THIRD_PARTY_LICENSES.md`, `Cargo.lock` | `cargo metadata` review |

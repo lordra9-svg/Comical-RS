@@ -6,7 +6,8 @@ A behavior-compatible comic viewer for Windows, macOS and Linux. It reads image
 entries from ZIP, RAR, 7z and directory books. The implementation is MIT. The
 archive readers are permissive third-party crates.
 
-The project is built in slices. Only the archive and core slices are implemented.
+The project is built in slices. The archive, core and image slices are
+implemented. The desktop UI is not.
 
 ## Workspace
 
@@ -18,7 +19,7 @@ comical-archive  --->  comical-core
     |
     +--> zip, rars, sevenz-rust
 
-comical-image    (placeholder, future image pipeline)
+comical-image    --->  image (PNG, JPEG, GIF decode)
 comical-app      (placeholder, future desktop UI)
 
 xtask            (development only: writes synthetic test archives)
@@ -85,13 +86,29 @@ PageEntry list
   -> screen mapping (future UI, direction-dependent)
   -> compute_zoom (canvas, page, options, neighbors)
   -> target size
-  -> decode and resample (future image pipeline)
+  -> decode and resample (comical-image)
   -> draw (future UI)
 ```
 
 `SpreadState` works in book order. Right-to-left reading does not change the
 spread; it only changes which page is drawn on the screen left. That screen
 mapping belongs to the UI layer, not the core.
+
+### Image pipeline
+
+```text
+page bytes
+  -> format allowlist          PNG / JPEG / GIF
+  -> header pixel cap          MAX_DECODED_PIXELS
+  -> decode to RGB8            alpha dropped
+  -> rotate                    quarter turns
+  -> resize                    six filters, two passes
+  -> RgbImage
+```
+
+`comical-image` owns decode, rotation and resampling. It does not know about
+archives, spreads, zoom modes or UI. Rotation happens before the UI asks the
+core for page orientation. See `image.md`.
 
 ## Book model
 
@@ -137,6 +154,9 @@ typed error.
 | Multi-volume RAR | Rejected, never partially listed |
 | Corrupt input | Typed error, never a panic on normal malformed input |
 | Page count | No explicit count cap; memory is bounded by entry metadata and book size |
+| Decoded pixels | 100,000,000 pixel cap from header before decode |
+| Resize target | Fallible RGB allocation; zero sides rejected |
+| Image input | PNG, JPEG and GIF only; malformed input returns a typed error |
 
 The password is a `String` while a book is open. It is not zeroized. This is a
 known hardening gap, not a correctness bug.
@@ -164,11 +184,12 @@ lock. The current CLI is single-threaded.
 
 ## Current limitations
 
-- `comical-image` and `comical-app` are placeholders.
+- `comical-app` is a placeholder. There is no UI.
 - No macOS or Linux CI has run.
-- No real-world archive corpus has been tested.
+- No real-world archive corpus or image corpus has been tested.
 - No fuzzing or malformed-input campaign has run.
-- No natural sort, WebP, AVIF or animated-image policy beyond the decoder later.
-- No settings, thumbnails, fullscreen, rotation state or UI input handling.
+- No natural sort, WebP or AVIF. GIF uses the first frame only.
+- No EXIF orientation handling.
+- No settings, thumbnails, fullscreen, rotation persistence or UI input handling.
 
 See `roadmap.md` for the planned slices.
