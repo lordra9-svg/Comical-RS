@@ -27,7 +27,8 @@ xtask/                 build and vector tooling (empty)
 
 ## Toolchain
 
-- Rust stable. On Windows, the GNU host is acceptable if `gcc` is present.
+- Rust 1.99.1 with the GNU host is installed.
+- Add `%USERPROFILE%\.cargo\bin` to `PATH` in a new shell if `cargo` is not found.
 - CMake and Ninja are optional.
 - `cargo-nextest`, `cargo-deny`, `cargo-fuzz` are optional at M0.5.
 
