@@ -1,0 +1,31 @@
+{
+  "spec": "spec-v1",
+  "status": "seed, spec-derived, pending oracle confirmation",
+  "notes": "RTL changes which page is drawn on the screen left. Book order stays the same.",
+  "cases": [
+    {
+      "name": "rtl-first-page1-landscape",
+      "pages": ["portrait", "landscape", "portrait", "portrait"],
+      "direction": "rtl",
+      "op": {"type": "first"},
+      "expected": {
+        "book_left": {"page": 0, "part": "full"},
+        "book_right": {"page": 1, "part": "left"},
+        "screen_left": {"page": 1, "part": "left"},
+        "screen_right": {"page": 0, "part": "full"}
+      }
+    },
+    {
+      "name": "ltr-first-page1-landscape",
+      "pages": ["portrait", "landscape", "portrait", "portrait"],
+      "direction": "ltr",
+      "op": {"type": "first"},
+      "expected": {
+        "book_left": {"page": 0, "part": "full"},
+        "book_right": {"page": 1, "part": "left"},
+        "screen_left": {"page": 0, "part": "full"},
+        "screen_right": {"page": 1, "part": "left"}
+      }
+    }
+  ]
+}

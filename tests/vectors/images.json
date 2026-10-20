@@ -1,0 +1,6 @@
+{
+  "spec": "spec-v1",
+  "status": "empty, pending oracle",
+  "notes": "The oracle runner fills this file with input hashes, filter, target size and output hashes. Do not put reference code here.",
+  "cases": []
+}

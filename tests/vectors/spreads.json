@@ -1,0 +1,273 @@
+{
+  "spec": "spec-v1",
+  "status": "seed, spec-derived, pending oracle confirmation",
+  "notes": "Pages are portrait or landscape after rotation. Expected spreads are in book order. RTL changes draw side, not book order.",
+  "cases": [
+    {
+      "name": "n1-first",
+      "pages": ["portrait"],
+      "start": null,
+      "op": {"type": "first"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": null}
+    },
+    {
+      "name": "n1-last",
+      "pages": ["portrait"],
+      "start": null,
+      "op": {"type": "last"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": null}
+    },
+    {
+      "name": "n1-next-turn-stable",
+      "pages": ["portrait"],
+      "start": {"left": {"page": 0, "part": "full"}, "right": null},
+      "op": {"type": "next_turn"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": null}
+    },
+    {
+      "name": "n2-first",
+      "pages": ["portrait", "portrait"],
+      "start": null,
+      "op": {"type": "first"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n2-next-turn-stable",
+      "pages": ["portrait", "portrait"],
+      "start": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}},
+      "op": {"type": "next_turn"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n2-next-page-clamps",
+      "pages": ["portrait", "portrait"],
+      "start": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}},
+      "op": {"type": "next_page"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n2-prev-page-clamps",
+      "pages": ["portrait", "portrait"],
+      "start": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}},
+      "op": {"type": "prev_page"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n4-all-portrait-first",
+      "pages": ["portrait", "portrait", "portrait", "portrait"],
+      "start": null,
+      "op": {"type": "first"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n4-all-portrait-next-turn",
+      "pages": ["portrait", "portrait", "portrait", "portrait"],
+      "start": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}},
+      "op": {"type": "next_turn"},
+      "expected": {"left": {"page": 2, "part": "full"}, "right": {"page": 3, "part": "full"}}
+    },
+    {
+      "name": "n4-all-portrait-next-page",
+      "pages": ["portrait", "portrait", "portrait", "portrait"],
+      "start": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}},
+      "op": {"type": "next_page"},
+      "expected": {"left": {"page": 1, "part": "full"}, "right": {"page": 2, "part": "full"}}
+    },
+    {
+      "name": "n4-all-portrait-prev-turn",
+      "pages": ["portrait", "portrait", "portrait", "portrait"],
+      "start": {"left": {"page": 2, "part": "full"}, "right": {"page": 3, "part": "full"}},
+      "op": {"type": "prev_turn"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n4-all-portrait-last",
+      "pages": ["portrait", "portrait", "portrait", "portrait"],
+      "start": null,
+      "op": {"type": "last"},
+      "expected": {"left": {"page": 2, "part": "full"}, "right": {"page": 3, "part": "full"}}
+    },
+    {
+      "name": "n4-all-portrait-next-turn-at-last",
+      "pages": ["portrait", "portrait", "portrait", "portrait"],
+      "start": {"left": {"page": 2, "part": "full"}, "right": {"page": 3, "part": "full"}},
+      "op": {"type": "next_turn"},
+      "expected": {"left": {"page": 2, "part": "full"}, "right": {"page": 3, "part": "full"}}
+    },
+    {
+      "name": "n4-page1-landscape-first",
+      "pages": ["portrait", "landscape", "portrait", "portrait"],
+      "start": null,
+      "op": {"type": "first"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "left"}}
+    },
+    {
+      "name": "n4-page1-landscape-next-turn",
+      "pages": ["portrait", "landscape", "portrait", "portrait"],
+      "start": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "left"}},
+      "op": {"type": "next_turn"},
+      "expected": {"left": {"page": 1, "part": "right"}, "right": {"page": 2, "part": "full"}}
+    },
+    {
+      "name": "n4-page1-landscape-next-page",
+      "pages": ["portrait", "landscape", "portrait", "portrait"],
+      "start": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "left"}},
+      "op": {"type": "next_page"},
+      "expected": {"left": {"page": 1, "part": "left"}, "right": {"page": 1, "part": "right"}}
+    },
+    {
+      "name": "n4-page1-landscape-next-page-again",
+      "pages": ["portrait", "landscape", "portrait", "portrait"],
+      "start": {"left": {"page": 1, "part": "left"}, "right": {"page": 1, "part": "right"}},
+      "op": {"type": "next_page"},
+      "expected": {"left": {"page": 1, "part": "right"}, "right": {"page": 2, "part": "full"}}
+    },
+    {
+      "name": "n4-page1-landscape-prev-turn",
+      "pages": ["portrait", "landscape", "portrait", "portrait"],
+      "start": {"left": {"page": 1, "part": "right"}, "right": {"page": 2, "part": "full"}},
+      "op": {"type": "prev_turn"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "left"}}
+    },
+    {
+      "name": "n4-page2-landscape-first",
+      "pages": ["portrait", "portrait", "landscape", "portrait"],
+      "start": null,
+      "op": {"type": "first"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n4-page2-landscape-next-turn",
+      "pages": ["portrait", "portrait", "landscape", "portrait"],
+      "start": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}},
+      "op": {"type": "next_turn"},
+      "expected": {"left": {"page": 2, "part": "left"}, "right": {"page": 2, "part": "right"}}
+    },
+    {
+      "name": "n4-page2-landscape-next-turn-again",
+      "pages": ["portrait", "portrait", "landscape", "portrait"],
+      "start": {"left": {"page": 2, "part": "left"}, "right": {"page": 2, "part": "right"}},
+      "op": {"type": "next_turn"},
+      "expected": {"left": {"page": 2, "part": "right"}, "right": {"page": 3, "part": "full"}}
+    },
+    {
+      "name": "n4-page2-landscape-prev-turn",
+      "pages": ["portrait", "portrait", "landscape", "portrait"],
+      "start": {"left": {"page": 2, "part": "right"}, "right": {"page": 3, "part": "full"}},
+      "op": {"type": "prev_turn"},
+      "expected": {"left": {"page": 1, "part": "full"}, "right": {"page": 2, "part": "left"}}
+    },
+    {
+      "name": "n4-page2-landscape-prev-turn-from-split",
+      "pages": ["portrait", "portrait", "landscape", "portrait"],
+      "start": {"left": {"page": 2, "part": "left"}, "right": {"page": 2, "part": "right"}},
+      "op": {"type": "prev_turn"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n3-page0-landscape-first",
+      "pages": ["landscape", "portrait", "portrait"],
+      "start": null,
+      "op": {"type": "first"},
+      "expected": {"left": {"page": 0, "part": "left"}, "right": {"page": 0, "part": "right"}}
+    },
+    {
+      "name": "n3-page0-landscape-next-turn",
+      "pages": ["landscape", "portrait", "portrait"],
+      "start": {"left": {"page": 0, "part": "left"}, "right": {"page": 0, "part": "right"}},
+      "op": {"type": "next_turn"},
+      "expected": {"left": {"page": 1, "part": "full"}, "right": {"page": 2, "part": "full"}}
+    },
+    {
+      "name": "n3-page0-landscape-next-page",
+      "pages": ["landscape", "portrait", "portrait"],
+      "start": {"left": {"page": 0, "part": "left"}, "right": {"page": 0, "part": "right"}},
+      "op": {"type": "next_page"},
+      "expected": {"left": {"page": 0, "part": "right"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n4-page3-landscape-last",
+      "pages": ["portrait", "portrait", "portrait", "landscape"],
+      "start": null,
+      "op": {"type": "last"},
+      "expected": {"left": {"page": 3, "part": "left"}, "right": {"page": 3, "part": "right"}}
+    },
+    {
+      "name": "n4-page3-landscape-prev-turn",
+      "pages": ["portrait", "portrait", "portrait", "landscape"],
+      "start": {"left": {"page": 3, "part": "left"}, "right": {"page": 3, "part": "right"}},
+      "op": {"type": "prev_turn"},
+      "expected": {"left": {"page": 1, "part": "full"}, "right": {"page": 2, "part": "full"}}
+    },
+    {
+      "name": "n4-page3-landscape-prev-page",
+      "pages": ["portrait", "portrait", "portrait", "landscape"],
+      "start": {"left": {"page": 3, "part": "left"}, "right": {"page": 3, "part": "right"}},
+      "op": {"type": "prev_page"},
+      "expected": {"left": {"page": 2, "part": "full"}, "right": {"page": 3, "part": "left"}}
+    },
+    {
+      "name": "n4-page3-landscape-next-turn-from-prev",
+      "pages": ["portrait", "portrait", "portrait", "landscape"],
+      "start": {"left": {"page": 2, "part": "full"}, "right": {"page": 3, "part": "left"}},
+      "op": {"type": "next_turn"},
+      "expected": {"left": {"page": 3, "part": "left"}, "right": {"page": 3, "part": "right"}}
+    },
+    {
+      "name": "n4-all-portrait-goto-2",
+      "pages": ["portrait", "portrait", "portrait", "portrait"],
+      "start": null,
+      "op": {"type": "goto", "page": 2},
+      "expected": {"left": {"page": 2, "part": "full"}, "right": {"page": 3, "part": "full"}}
+    },
+    {
+      "name": "n4-all-portrait-goto-0",
+      "pages": ["portrait", "portrait", "portrait", "portrait"],
+      "start": null,
+      "op": {"type": "goto", "page": 0},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n4-all-portrait-goto-3",
+      "pages": ["portrait", "portrait", "portrait", "portrait"],
+      "start": null,
+      "op": {"type": "goto", "page": 3},
+      "expected": {"left": {"page": 2, "part": "full"}, "right": {"page": 3, "part": "full"}}
+    },
+    {
+      "name": "n4-page1-landscape-goto-1",
+      "pages": ["portrait", "landscape", "portrait", "portrait"],
+      "start": null,
+      "op": {"type": "goto", "page": 1},
+      "expected": {"left": {"page": 1, "part": "left"}, "right": {"page": 1, "part": "right"}}
+    },
+    {
+      "name": "n3-page2-landscape-last",
+      "pages": ["portrait", "portrait", "landscape"],
+      "start": null,
+      "op": {"type": "last"},
+      "expected": {"left": {"page": 2, "part": "left"}, "right": {"page": 2, "part": "right"}}
+    },
+    {
+      "name": "n3-page2-landscape-prev-turn",
+      "pages": ["portrait", "portrait", "landscape"],
+      "start": {"left": {"page": 2, "part": "left"}, "right": {"page": 2, "part": "right"}},
+      "op": {"type": "prev_turn"},
+      "expected": {"left": {"page": 0, "part": "full"}, "right": {"page": 1, "part": "full"}}
+    },
+    {
+      "name": "n3-page2-landscape-prev-page",
+      "pages": ["portrait", "portrait", "landscape"],
+      "start": {"left": {"page": 2, "part": "left"}, "right": {"page": 2, "part": "right"}},
+      "op": {"type": "prev_page"},
+      "expected": {"left": {"page": 1, "part": "full"}, "right": {"page": 2, "part": "left"}}
+    },
+    {
+      "name": "n3-page2-landscape-next-page-clamps",
+      "pages": ["portrait", "portrait", "landscape"],
+      "start": {"left": {"page": 2, "part": "left"}, "right": {"page": 2, "part": "right"}},
+      "op": {"type": "next_page"},
+      "expected": {"left": {"page": 2, "part": "left"}, "right": {"page": 2, "part": "right"}}
+    }
+  ]
+}

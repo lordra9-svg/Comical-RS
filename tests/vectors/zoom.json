@@ -1,0 +1,194 @@
+{
+  "spec": "spec-v1",
+  "status": "seed, spec-derived, pending oracle confirmation",
+  "notes": "Canvas and page sizes are physical pixels. Scale tolerance is 1e-6. Width and height use truncation.",
+  "cases": [
+    {
+      "name": "one-page-portrait-fit",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 1000, "height": 1500},
+      "zoom": "fit",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.2666666667, "width": 266, "height": 400}
+    },
+    {
+      "name": "one-page-landscape-fit",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 1500, "height": 1000},
+      "zoom": "fit",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.4, "width": 600, "height": 400}
+    },
+    {
+      "name": "two-page-portrait-fit",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 1000, "height": 1500},
+      "zoom": "fit",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.2666666667, "width": 266, "height": 400}
+    },
+    {
+      "name": "two-page-landscape-fit",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 1500, "height": 1000},
+      "zoom": "fit",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.4, "width": 600, "height": 400}
+    },
+    {
+      "name": "one-page-portrait-width",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 1000, "height": 1500},
+      "zoom": "width",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.585, "width": 585, "height": 877}
+    },
+    {
+      "name": "one-page-wide-width-no-scrollbar",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 1470, "height": 1000},
+      "zoom": "width",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.4, "width": 588, "height": 400}
+    },
+    {
+      "name": "two-page-portrait-width",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 1000, "height": 1500},
+      "zoom": "width",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.292, "width": 292, "height": 438}
+    },
+    {
+      "name": "one-page-portrait-height",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 1000, "height": 1500},
+      "zoom": "height",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.2666666667, "width": 266, "height": 400}
+    },
+    {
+      "name": "one-page-landscape-height",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 1500, "height": 1000},
+      "zoom": "height",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.4, "width": 600, "height": 400}
+    },
+    {
+      "name": "one-page-wide-height-scrollbar",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 2000, "height": 1000},
+      "zoom": "height",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.385, "width": 770, "height": 385}
+    },
+    {
+      "name": "one-page-wide-height-no-scrollbar",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 1530, "height": 1000},
+      "zoom": "height",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.3921568627, "width": 600, "height": 392}
+    },
+    {
+      "name": "one-page-portrait-full",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 1000, "height": 1500},
+      "zoom": "full",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 1.0, "width": 1000, "height": 1500}
+    },
+    {
+      "name": "one-page-portrait-custom-50",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 1000, "height": 1500},
+      "zoom": "custom",
+      "zoom_percent": 50,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.5, "width": 500, "height": 750}
+    },
+    {
+      "name": "one-page-portrait-fit-oversize",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 500, "height": 700},
+      "zoom": "fit",
+      "zoom_percent": 100,
+      "fit_only_oversize": true,
+      "expected": {"scale": 0.5714285714, "width": 285, "height": 400}
+    },
+    {
+      "name": "one-page-portrait-fit-not-oversize",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "one_page",
+      "page": {"width": 300, "height": 400},
+      "zoom": "fit",
+      "zoom_percent": 100,
+      "fit_only_oversize": true,
+      "expected": {"scale": 1.0, "width": 300, "height": 400}
+    },
+    {
+      "name": "two-page-square-fit-wide",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 1000, "height": 1000},
+      "zoom": "fit",
+      "zoom_percent": 100,
+      "fit_only_oversize": false,
+      "expected": {"scale": 0.4, "width": 400, "height": 400}
+    },
+    {
+      "name": "two-page-square-fit-oversize-quirk",
+      "canvas": {"width": 600, "height": 400},
+      "scrollbar": 15,
+      "mode": "two_page",
+      "page": {"width": 350, "height": 350},
+      "zoom": "fit",
+      "zoom_percent": 100,
+      "fit_only_oversize": true,
+      "expected": {"scale": 1.1428571429, "width": 400, "height": 400}
+    }
+  ]
+}
