@@ -15,8 +15,11 @@ If you encounter forbidden material, stop and report it.
 ## Status
 
 M1. The workspace is scaffolded. `comical-cli` can list pages in ZIP, RAR and
-7z archives or directories and extract one page by index. The UI, spread
-machine and image filters are not started yet.
+7z archives or directories and extract one page by index. ZIP supports stored,
+deflate and AES-256 entries; RAR 1.4 through 7 is covered, including solid,
+encrypted data and encrypted headers; 7z supports LZMA2 and AES-256.
+Multi-volume RAR is rejected as unsupported. The UI, spread machine and image
+filters are not started yet.
 
 ## Usage
 
@@ -30,8 +33,8 @@ cargo run -p comical-cli -- probe target/fixtures/sample.cb7
 cargo run -p comical-cli -- extract target/fixtures/sample.cbz 0 target/page.bin
 ```
 
-Pass `--password <value>` for encrypted ZIP AES-256 or RAR entries. Passwords
-are never written to disk.
+Pass `--password <value>` for encrypted ZIP AES-256, RAR data or headers, and
+7z AES-256 archives. Passwords are never written to disk.
 
 ## Layout
 

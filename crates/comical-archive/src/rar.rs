@@ -22,15 +22,14 @@ pub(crate) fn open(
 
     let mut candidates = Vec::new();
     for (index, member) in archive.member_refs().enumerate() {
-        if member.is_directory() || member.is_redirection() {
-            continue;
-        }
-
         let owned = member.to_owned();
         let meta = &owned.meta;
-        // Multi-volume archives are out of scope. A split part is not a whole
-        // page, so it is not exposed as one.
+        // Multi-volume archives are out of scope. Skipping a split part would
+        // silently produce an incomplete page list, so reject the book.
         if meta.is_split_before || meta.is_split_after {
+            return Err(ArchiveError::Unsupported("multi-volume RAR".to_owned()));
+        }
+        if member.is_directory() || member.is_redirection() {
             continue;
         }
 

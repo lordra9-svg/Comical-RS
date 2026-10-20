@@ -8,7 +8,9 @@ use comical_archive::{
 };
 use tempfile::TempDir;
 use xtask::{
-    FixtureEntry, ZipEncryption, ZipMethod, write_7z, write_corrupt, write_rar, write_zip,
+    FixtureEntry, RarFixtureOptions, RarVersion, ZipEncryption, ZipMethod, write_7z,
+    write_7z_encrypted, write_corrupt, write_cp437_zip, write_rar, write_rar_volume_set,
+    write_rar_with_options, write_zip,
 };
 
 const PAGE_A: &[u8] = b"\x89PNG\r\n\x1a\npage-a";
@@ -172,6 +174,226 @@ fn rar_password_is_supported_and_wrong_password_is_rejected() {
 }
 
 #[test]
+fn rar_versions_from_14_through_7_list_and_extract_exact_bytes() {
+    for version in [
+        RarVersion::Rar14,
+        RarVersion::Rar15,
+        RarVersion::Rar20,
+        RarVersion::Rar29,
+        RarVersion::Rar30,
+        RarVersion::Rar40,
+        RarVersion::Rar50,
+        RarVersion::Rar70,
+    ] {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join(format!("{version:?}.cbr"));
+        let entries = [
+            FixtureEntry::new("b.png", PAGE_B),
+            FixtureEntry::new("A.jpg", PAGE_A),
+            FixtureEntry::new("sub/c.JPEG", PAGE_C),
+            FixtureEntry::new("readme.txt", b"not a page"),
+        ];
+        write_rar_with_options(
+            &path,
+            &entries,
+            RarFixtureOptions {
+                version,
+                ..RarFixtureOptions::default()
+            },
+        )
+        .unwrap();
+
+        let mut archive = open_path(&path);
+        assert_eq!(
+            names(archive.as_ref()),
+            vec!["A.jpg", "b.png", "sub/c.JPEG"],
+            "{version:?}"
+        );
+        assert_eq!(archive.read_page(0, 1024).unwrap(), PAGE_A, "{version:?}");
+        assert_eq!(archive.read_page(1, 1024).unwrap(), PAGE_B, "{version:?}");
+        assert_eq!(archive.read_page(2, 1024).unwrap(), PAGE_C, "{version:?}");
+    }
+}
+
+#[test]
+fn solid_rar5_and_rar7_read_every_page() {
+    for version in [RarVersion::Rar50, RarVersion::Rar70] {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join(format!("solid-{version:?}.cbr"));
+        let entries = [
+            FixtureEntry::new("d.gif", PAGE_D),
+            FixtureEntry::new("a.png", PAGE_A),
+            FixtureEntry::new("c.jpg", PAGE_C),
+            FixtureEntry::new("b.png", PAGE_B),
+        ];
+        write_rar_with_options(
+            &path,
+            &entries,
+            RarFixtureOptions {
+                version,
+                solid: true,
+                ..RarFixtureOptions::default()
+            },
+        )
+        .unwrap();
+
+        let mut archive = open_path(&path);
+        assert_eq!(
+            names(archive.as_ref()),
+            vec!["a.png", "b.png", "c.jpg", "d.gif"],
+            "{version:?}"
+        );
+        assert_eq!(archive.read_page(0, 1024).unwrap(), PAGE_A, "{version:?}");
+        assert_eq!(archive.read_page(1, 1024).unwrap(), PAGE_B, "{version:?}");
+        assert_eq!(archive.read_page(2, 1024).unwrap(), PAGE_C, "{version:?}");
+        assert_eq!(archive.read_page(3, 1024).unwrap(), PAGE_D, "{version:?}");
+    }
+}
+
+#[test]
+fn encrypted_rar5_and_rar7_data_require_the_correct_password() {
+    for version in [RarVersion::Rar50, RarVersion::Rar70] {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join(format!("data-{version:?}.cbr"));
+        let entries = [
+            FixtureEntry::new("secret.png", PAGE_A),
+            FixtureEntry::new("secret2.jpg", PAGE_B),
+        ];
+        write_rar_with_options(
+            &path,
+            &entries,
+            RarFixtureOptions {
+                version,
+                password: Some("open-sesame"),
+                ..RarFixtureOptions::default()
+            },
+        )
+        .unwrap();
+
+        // Header data is not encrypted, so listing still works.
+        let mut locked = open_path(&path);
+        assert_eq!(
+            names(locked.as_ref()),
+            vec!["secret.png", "secret2.jpg"],
+            "{version:?}"
+        );
+        assert!(matches!(
+            locked.read_page(0, 1024),
+            Err(ArchiveError::PasswordRequired)
+        ));
+
+        match open_with_options(&path, OpenOptions::new().with_password(Some("wrong"))) {
+            Err(ArchiveError::BadPassword) => {}
+            Ok(mut wrong) => assert!(matches!(
+                wrong.read_page(0, 1024),
+                Err(ArchiveError::BadPassword)
+            )),
+            Err(other) => panic!("expected a bad-password error, got {other}"),
+        }
+
+        let mut archive =
+            open_with_options(&path, OpenOptions::new().with_password(Some("open-sesame")))
+                .unwrap();
+        assert_eq!(archive.read_page(0, 1024).unwrap(), PAGE_A, "{version:?}");
+        assert_eq!(archive.read_page(1, 1024).unwrap(), PAGE_B, "{version:?}");
+    }
+}
+
+#[test]
+fn encrypted_rar5_and_rar7_headers_require_the_correct_password() {
+    for version in [RarVersion::Rar50, RarVersion::Rar70] {
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join(format!("headers-{version:?}.cbr"));
+        let entries = [
+            FixtureEntry::new("secret.png", PAGE_A),
+            FixtureEntry::new("secret2.jpg", PAGE_B),
+        ];
+        write_rar_with_options(
+            &path,
+            &entries,
+            RarFixtureOptions {
+                version,
+                password: Some("open-sesame"),
+                encrypted_headers: true,
+                ..RarFixtureOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert!(matches!(open(&path), Err(ArchiveError::PasswordRequired)));
+        assert!(matches!(
+            open_with_options(&path, OpenOptions::new().with_password(Some("wrong"))),
+            Err(ArchiveError::BadPassword)
+        ));
+
+        let mut archive =
+            open_with_options(&path, OpenOptions::new().with_password(Some("open-sesame")))
+                .unwrap();
+        assert_eq!(
+            names(archive.as_ref()),
+            vec!["secret.png", "secret2.jpg"],
+            "{version:?}"
+        );
+        assert_eq!(archive.read_page(0, 1024).unwrap(), PAGE_A, "{version:?}");
+        assert_eq!(archive.read_page(1, 1024).unwrap(), PAGE_B, "{version:?}");
+    }
+}
+
+#[test]
+fn multi_volume_rar_is_rejected_instead_of_silently_incomplete() {
+    let directory = TempDir::new().unwrap();
+    let mut first = [0u8; 2048];
+    let mut second = [0u8; 2048];
+    let mut state = 0x1234_5678u32;
+    for byte in first.iter_mut().chain(second.iter_mut()) {
+        state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        *byte = (state >> 24) as u8;
+    }
+    let entries = [
+        FixtureEntry::new("one.png", &first),
+        FixtureEntry::new("two.png", &second),
+    ];
+    let parts = write_rar_volume_set(
+        directory.path(),
+        "split",
+        &entries,
+        RarFixtureOptions {
+            version: RarVersion::Rar50,
+            ..RarFixtureOptions::default()
+        },
+        1024,
+    )
+    .unwrap();
+    assert!(parts.len() > 1, "writer did not produce multiple volumes");
+
+    for part in [&parts[0], parts.last().unwrap()] {
+        match open(part) {
+            Err(ArchiveError::Unsupported(message)) => {
+                assert_eq!(message, "multi-volume RAR");
+            }
+            other => panic!(
+                "expected multi-volume RAR to be unsupported, got {}",
+                match other {
+                    Ok(_) => "a successfully opened archive".to_owned(),
+                    Err(error) => error.to_string(),
+                }
+            ),
+        }
+    }
+}
+
+#[test]
+fn zip_cp437_name_without_utf8_flag_is_decoded() {
+    let directory = TempDir::new().unwrap();
+    let path = directory.path().join("legacy-name.cbz");
+    write_cp437_zip(&path, b"caf\x82.png", PAGE_A).unwrap();
+
+    let mut archive = open_path(&path);
+    assert_eq!(names(archive.as_ref()), vec!["café.png"]);
+    assert_eq!(archive.read_page(0, 1024).unwrap(), PAGE_A);
+}
+
+#[test]
 fn sevenz_lists_and_extracts() {
     let directory = TempDir::new().unwrap();
     let path = directory.path().join("book.cb7");
@@ -191,6 +413,30 @@ fn sevenz_lists_and_extracts() {
     assert_eq!(archive.read_page(0, 1024).unwrap(), PAGE_A);
     assert_eq!(archive.read_page(1, 1024).unwrap(), PAGE_B);
     assert_eq!(archive.read_page(2, 1024).unwrap(), PAGE_C);
+}
+
+#[test]
+fn sevenz_aes256_password_is_supported_and_wrong_password_is_rejected() {
+    let directory = TempDir::new().unwrap();
+    let path = directory.path().join("secret.cb7");
+    let entries = [
+        FixtureEntry::new("secret.png", PAGE_A),
+        FixtureEntry::new("second.jpg", PAGE_B),
+    ];
+    write_7z_encrypted(&path, &entries, "open-sesame").unwrap();
+
+    assert!(matches!(open(&path), Err(ArchiveError::PasswordRequired)));
+
+    assert!(matches!(
+        open_with_options(&path, OpenOptions::new().with_password(Some("wrong"))),
+        Err(ArchiveError::BadPassword)
+    ));
+
+    let mut archive =
+        open_with_options(&path, OpenOptions::new().with_password(Some("open-sesame"))).unwrap();
+    assert_eq!(names(archive.as_ref()), vec!["second.jpg", "secret.png"]);
+    assert_eq!(archive.read_page(0, 1024).unwrap(), PAGE_B);
+    assert_eq!(archive.read_page(1, 1024).unwrap(), PAGE_A);
 }
 
 #[test]

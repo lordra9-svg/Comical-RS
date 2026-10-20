@@ -55,6 +55,9 @@ analysis document, C++ harness or Bloks memory file was read.
 - 2026-10-20: Builder (clean-room subagent) read only this repository and the
   public documentation/source of the allowed dependency crates. M1 archive
   slice added.
+- 2026-10-20: Builder (clean-room subagent) extended M1 archive coverage using
+  the same allowed sources: RAR 1.4 through 7, solid and encrypted RAR, AES-256
+  7z, CP437 ZIP names, and explicit multi-volume rejection.
 
 ## AI caveat
 

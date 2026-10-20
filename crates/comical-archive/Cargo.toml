@@ -10,11 +10,14 @@ license.workspace = true
 comical-core = { workspace = true }
 thiserror = { workspace = true }
 
-# Reader only: no writer, recovery, parallel or extra compressor features.
-# Encryption is enabled because the behavior spec requires encrypted archives.
+# Reader only: no recovery, parallel or optional compressor features beyond
+# what encryption requires. Encryption is enabled because the behavior spec
+# requires encrypted archives.
 zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs", "aes-crypto"] }
 rars = { version = "0.11", default-features = false, features = ["encryption"] }
-sevenz-rust = { version = "0.6.1", default-features = false }
+# sevenz-rust 0.6.1's aes256 feature needs lzma-rust's encoder module to
+# compile, so compress is required even for this read-only consumer.
+sevenz-rust = { version = "0.6.1", default-features = false, features = ["aes256", "compress"] }
 
 [dev-dependencies]
 tempfile = "3"
