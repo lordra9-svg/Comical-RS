@@ -10,8 +10,8 @@ planned item as a contract until it has tests and a spec section.
 | M0 spec and vectors | Done | `spec/behavior.md`, `tests/vectors/` |
 | M1 archive | Done on Windows | `comical-archive`, `comical-cli` |
 | M2 core layout and zoom | Done | `comical-core` |
-| M3 image pipeline | Not started | `comical-image` placeholder |
-| M4 desktop UI | Not started | `comical-app` placeholder |
+| M3 image pipeline | Done on Windows | `comical-image` |
+| M4 desktop UI | Done on Windows (M4 scope) | `comical-app` |
 | CI | Not started | no workflow files |
 | Real archive corpus | Not started | synthetic fixtures only |
 | Packaging | Not started | no installers or associations |
@@ -50,36 +50,40 @@ Do not copy resize code from another project. Do not add a GPL image library.
 
 ## M4: desktop UI
 
-Target crate: `comical-app`.
+Target crate: `comical-app`. The M4 slice is implemented and verified on
+Windows. Details: `docs/app.md`.
 
-Planned responsibilities:
+Implemented:
 
-1. Open a book with a file dialog.
-2. Build page orientations after rotation.
-3. Drive `SpreadState` from keyboard, mouse and toolbar.
-4. Map book order to screen order for LTR and RTL.
-5. Call `compute_zoom_with_neighbors` and draw the result.
-6. Cache decoded and resized pages by memory budget.
-7. Thumbnail browser.
-8. Fullscreen, toolbar, context menu, settings and password prompt.
-9. Remember window size and recent books.
+1. Open a book from a CLI argument or the `rfd` file dialog.
+2. Build page orientations from decoded pages, with a two-pass draw so a
+   landscape page splits on its first painted frame.
+3. Drive `SpreadState` from the keyboard. One-page and two-page modes.
+4. Call `compute_zoom_with_neighbors` for Fit, Width, Height, Full and Custom.
+5. Cache decoded pages and uploaded textures, keyed by page, part and target
+   size. Panning does no decode, resize or upload.
+6. Drag-to-pan with clamping, pan reset on page and zoom changes.
+7. F11 fullscreen, error display in the canvas, window title from the file name.
 
-Open decisions:
+Still to do in M5 and later:
 
-- egui/eframe or a retained native toolkit.
-- Cache budget and eviction policy.
-- Thumbnail generation strategy.
-- Settings format and location.
-- Last-page memory.
-- Natural sort option.
-- Product name and icons.
+1. Map book order to screen order for RTL, including the half swap.
+2. Rotation for the left and right page.
+3. Separate left and right page labels.
+4. Scrollbars, key scrolling and arrow-key scroll semantics.
+5. Toolbar, context menu, wheel and Ctrl+wheel input.
+6. Thumbnail browser.
+7. Settings, password prompt and last-page memory.
+8. macOS and Linux runs, plus the manual acceptance checklist on each.
 
-The UI must consume core types. It must not reimplement spread or zoom rules.
-Right-to-left is a screen mapping, not a reversal of `Spread`.
+Toolkit decision: eframe/egui with the `wgpu` backend, `rfd` for the file
+dialog, `lru` for the two caches.
 
-`tests/vectors/ui.json` is the seed for screen mapping. It currently contains
-two cases for the first spread, LTR and RTL. Expand it before implementing the
-UI.
+Known divergences from `spec/behavior.md` are listed in `docs/app.md`. Record
+them in the port plan before changing either side.
+
+`tests/vectors/ui.json` is the seed for screen mapping. It has two cases for the
+first spread, LTR and RTL. Expand it before implementing the UI screen mapping.
 
 ## Infrastructure
 
@@ -125,7 +129,7 @@ the UI and image pipeline are stable.
 
 | Decision | Current state | Impact |
 |---|---|---|
-| UI toolkit | egui recommended, not chosen | `comical-app` |
+| UI toolkit | `eframe`/`egui` with `wgpu`, `rfd` dialog | `comical-app` |
 | Natural sort | Off, byte sort only | archive ordering |
 | EXIF orientation | Not decided | image pipeline |
 | WebP / AVIF | Not in v1 | filter and decoder |

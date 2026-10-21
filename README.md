@@ -14,15 +14,26 @@ If you encounter forbidden material, stop and report it.
 
 ## Status
 
-M2 core. `comical-cli` can list pages in ZIP, RAR and 7z archives or directories
-and extract one page by index. ZIP supports stored, deflate and AES-256 entries;
-RAR 1.4 through 7 is covered, including solid, encrypted data and encrypted
-headers; 7z supports LZMA2 and AES-256. Multi-volume RAR is rejected as
-unsupported. `comical-core` now provides page orientation, one-page and two-page
-spread state, navigation, zoom, fit and oversize math. The UI and image filters
-are not started yet.
+M4 viewer slice. `comical-app` opens ZIP, RAR, 7z and directory books, draws
+one- and two-page spreads on a black canvas, and supports Fit, Fit Width, Fit
+Height, Original and Custom zoom, keyboard navigation, drag pan and fullscreen.
+`comical-cli` can list pages in the same formats and extract one page by index.
+ZIP supports stored, deflate and AES-256 entries; RAR 1.4 through 7 is covered,
+including solid, encrypted data and encrypted headers; 7z supports LZMA2 and
+AES-256. Multi-volume RAR is rejected as unsupported. `comical-core` provides
+page orientation, spread state, navigation, zoom, fit and oversize math;
+`comical-image` decodes PNG, JPEG and GIF and applies rotation and six filters.
+
+Toolbar, thumbnails, rotation, right-to-left drawing, settings and CI are still
+to come.
 
 ## Usage
+
+Run the viewer on a book:
+
+```
+cargo run -p comical-app -- target/fixtures/sample.cbz
+```
 
 Generate synthetic fixtures and probe them:
 
@@ -46,8 +57,8 @@ docs/                  implementation documentation and maintenance runbook
 crates/                product crates
   comical-core/        shared domain types
   comical-archive/     read-only ZIP, RAR, 7z and directory access
-  comical-image/       placeholder until the image milestone
-  comical-app/         placeholder until the UI milestone
+  comical-image/       decode, rotation and resampling
+  comical-app/         desktop viewer (eframe/egui)
   comical-cli/         probe and extract commands
 xtask/                 synthetic archive fixture generator
 ```
@@ -67,8 +78,8 @@ Implementation details, file ownership and the maintenance runbook start at
 1. ~~Scaffold the Cargo workspace.~~
 2. ~~Implement `comical-cli probe <book>` and `extract` for ZIP, RAR and 7z.~~
 3. ~~Implement the spread state machine and zoom math in `comical-core`.~~
-4. Image decoding, rotation and filters.
-5. Minimal desktop UI.
+4. ~~Image decoding, rotation and filters.~~
+5. ~~Minimal desktop UI: canvas, zoom modes, navigation, pan, fullscreen.~~
 6. Cross-platform CI and a real archive corpus.
 7. Packaging and release review.
 8. Add `Clean-Room: spec-v1` to every commit.

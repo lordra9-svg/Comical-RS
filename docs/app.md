@@ -1,0 +1,143 @@
+# `comical-app`: desktop viewer
+
+`comical-app` is the eframe/egui desktop shell. It opens a book, drives
+`comical-core` for spreads and zoom, asks `comical-image` for pixels, and paints
+the result on a black canvas. It reimplements no spread or zoom rule.
+
+This is the M4 slice: one window, black canvas, both view modes, five zoom
+modes, keyboard navigation, drag pan, fullscreen, CLI path and file dialog.
+Toolbar, thumbnails, rotation, RTL and settings are not implemented yet.
+
+## Files
+
+| File | Owns |
+|---|---|
+| `src/lib.rs` | Module wiring, `run()`, window and viewport defaults |
+| `src/main.rs` | `comical` binary: first CLI argument is the book path |
+| `src/app.rs` | `App`, `OpenedBook`, caches, book opening, navigation, pan, zoom state |
+| `src/view.rs` | Canvas drawing, content geometry, pan clamping, placeholder text |
+| `src/nav.rs` | Keyboard map |
+| `src/error.rs` | `AppError` |
+| `tests/open_book.rs` | Opens a real directory book and checks page 0 decodes |
+
+## State
+
+```text
+App
+  book: Option<OpenedBook>
+  spread: Option<SpreadState>
+  orientations: Vec<PageOrientation>   learned lazily from decoded pages
+  changed_pages: Vec<usize>            orientations learned since last rebuild
+  zoom: ZoomOptions                    mode always mirrors the spread state
+  pan: (f32, f32)                      canvas points
+  fullscreen: bool
+  error: Option<String>                book-level error, drawn in the canvas
+  title, title_dirty
+
+OpenedBook
+  pages: Vec<PageEntry>
+  archive: Box<dyn ComicArchive>
+  page_sizes: Vec<Option<Size>>        natural size, filled on first decode
+  page_errors: Vec<Option<String>>     per-page failure, not retried
+  natural: LruCache<usize, RgbImage>   decoded full pages, capacity 10
+  textures: LruCache<TextureKey, TextureHandle>
+                                       uploaded, resized, capacity 10
+```
+
+`TextureKey` is `(page, part, width, height)` and is `Copy`. A hit costs no
+archive read, no decode, no resample and no upload, which is what keeps drag
+panning inside the frame budget.
+
+Opening a book replaces `OpenedBook` only after the archive opens, so a failed
+open leaves the previous book on screen with the error drawn over it.
+
+## Frame sequence
+
+1. `title_dirty` sends `ViewportCommand::Title`.
+2. `nav::handle_input` reads one keyboard snapshot and applies at most one
+   navigation, one view-mode and one zoom change.
+3. `view::draw` paints the frame.
+4. If the spread changed during the frame, request a repaint.
+
+### Orientation learning
+
+Page orientation is not known from the archive. `view::draw` runs two passes:
+
+1. Resolve the visible page refs, call `App::page_size` for each, then call
+   `App::refresh_spread`. If a newly learned orientation changed the spread,
+   re-read the spread and fill sizes for any page it added.
+2. Compute zoom, fetch textures and paint.
+
+Learning before painting avoids showing a landscape page as a full portrait
+page for one frame. A landscape page in the left slot restarts the spread as
+its two halves; a landscape page in the right slot has its part changed to
+`PagePart::Left`, which keeps the left page visible.
+
+## Zoom
+
+`ZoomOptions::new(ViewMode::TwoPage, ZoomMode::Width)`, matching the behavior
+defaults. `custom_percent` starts at 100 and is clamped to 1 through 200.
+
+Every visible page is scaled as a whole page through
+`compute_zoom_with_neighbors`. The other visible page is passed as the neighbor,
+which is what makes the two-page scrollbar decisions agree. A split landscape
+page is then divided at the midpoint of the scaled dimensions:
+`split_size` gives the leftover pixel column of an odd width to the right half.
+
+`scrollbar` is 0 and `fit_only_if_oversized` is false. The application does not
+draw scrollbars; it pans instead. See the divergences below.
+
+## Rendering geometry
+
+- Canvas is the full `CentralPanel`, physical size is `points * pixels_per_point`.
+- Two-page spreads meet at the canvas center: the left page's right edge and the
+  right page's left edge both sit at `canvas_width / 2`.
+- A single page is centered horizontally.
+- Content is centered vertically when it fits, and top-aligned when it does not.
+- Pan is clamped so the content never leaves a gap at a canvas edge.
+- `RgbImage` becomes `ColorImage::from_rgb` and is uploaded once per
+  `TextureKey` with `TextureOptions::LINEAR`.
+- A page that fails to decode paints a dark placeholder with the wrapped error,
+  clipped to that page's rect. Other pages in the spread still render.
+
+## Input
+
+| Key | Action |
+|---|---|
+| Right, Page Down, J | Next turn |
+| Left, Page Up, K | Previous turn |
+| Down, Space | Next page |
+| Up, Backspace | Previous page |
+| Home, End | First, last spread |
+| 1, 2 | One-page, two-page |
+| F | Cycle Fit, Width, Height, Full, Custom |
+| W, H, O, C | Fit width, fit height, original, custom |
+| `+`, `=`, `-` | Custom percent by 10 |
+| 0 | Custom 100% |
+| F11 | Fullscreen |
+
+Left drag pans. Pan resets on every page, view-mode and zoom change.
+
+## Divergences from `spec/behavior.md`
+
+These are known and intentional for M4. Record them in the port plan before
+changing either side.
+
+| Spec | Current app | Reason |
+|---|---|---|
+| Arrow keys scroll 10 px | Arrows turn pages and step pages; pan is drag-only | M4 has no scrollbar or key-scroll path |
+| Scrollbar thickness reserved when content overflows | `scrollbar = 0`; content pans with no reserved thickness | No scrollbars are drawn yet |
+| Separate left and right page labels | One combined `n - m of N` label | Label layout is M5 |
+| Alt+Enter, Alt+O, Alt+X, F1 | F11 only | M4 scope |
+| Wheel scroll, Ctrl+wheel zoom, context menu | Not implemented | Later milestones |
+
+## Tests
+
+- `app.rs` unit tests: defaults, navigation and pan reset, view-mode and zoom
+  sync, percent clamping, orientation rebuild, split size, half cropping.
+- `view.rs` unit tests: two-page centering, pan clamping.
+- `tests/open_book.rs`: writes a real PNG into a temp directory, opens it as a
+  book, checks the page count and that page 0 decodes at its natural size.
+
+Not covered by automated tests: window creation, keyboard and pointer events,
+fullscreen, and the native file dialog. Those are on the manual checklist.

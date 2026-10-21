@@ -1,7 +1,7 @@
 # Testing
 
-The repository has 63 tests at the M3 slice. Tests are layered so a failure
-points to one subsystem.
+The repository has 75 tests at the M4 slice, plus one doctest. Tests are
+layered so a failure points to one subsystem.
 
 ## Commands
 
@@ -11,6 +11,7 @@ cargo test -p comical-core
 cargo test -p comical-archive
 cargo test -p comical-image
 cargo test -p comical-cli
+cargo test -p comical-app
 cargo test -p comical-archive zip_
 cargo test -p comical-core spread_vectors_match -- --nocapture
 cargo fmt --all -- --check
@@ -33,8 +34,35 @@ same gate.
 | Image golden filters | `comical-image/tests/images.rs` | 1 | All 42 oracle hashes |
 | Image transforms | `comical-image/tests/transform.rs` | 9 | Rotations, targets, buffer invariants |
 | CLI end-to-end | `comical-cli/tests/cli.rs` | 8 | Probe/extract, output format, passwords, errors |
+| App unit | `comical-app/src/{app,view}.rs` | 11 | Defaults, navigation, zoom state, orientation rebuild, split size, pan clamp |
+| App integration | `comical-app/tests/open_book.rs` | 1 | Opens a directory book, page 0 decodes at natural size |
 
-`comical-app` has no tests because it has no implementation yet.
+`comical-app` window creation, keyboard and pointer events, fullscreen and the
+native file dialog are manual checks, not automated tests.
+
+## App tests
+
+- Defaults match the behavior spec: two-page, fit width, 100% custom, no book.
+- Turn, page step, first and last move the spread and reset pan.
+- View-mode switches keep `ZoomOptions::mode` in sync.
+- Custom percent clamps to 1 through 200.
+- A decoded landscape page rebuilds the spread as its two halves, and a
+  landscape right page changes its part without hiding the left page.
+- Split size gives the leftover pixel to the right half; cropping keeps both
+  halves.
+- Two-page content meets at canvas center; pan clamps to content edges.
+- `tests/open_book.rs` writes a real 4x3 PNG into a temp directory and checks
+  page count and natural size.
+
+Run the viewer manually on Windows:
+
+```text
+cargo run -p comical-app -- target/fixtures/sample.cbz
+```
+
+Note: `target/fixtures/sample.cbz` uses deliberately invalid image bytes, so it
+exercises the per-page error placeholder, not page pixels. Use a real book to
+check rendering.
 
 ## Archive tests
 

@@ -59,6 +59,19 @@ Generate fixtures:
 cargo run -p xtask -- target/fixtures
 ```
 
+Run the viewer:
+
+```text
+cargo run -p comical-app -- path\to\book.cbz
+cargo run -p comical-app -- path\to\book.cbr
+cargo run -p comical-app -- path\to\book.cb7
+cargo run -p comical-app
+```
+
+With no argument the window opens with an "Open a book" button. Use a real book
+for visual checks: `target/fixtures/sample.cbz` has intentionally invalid image
+bytes and exists to exercise the per-page error placeholder.
+
 ## Diagnose common failures
 
 | Symptom | Likely cause | Check | Fix location |
@@ -81,6 +94,13 @@ cargo run -p xtask -- target/fixtures
 | `image is too large` | Header above 100M pixels or allocation failed | header dimensions, cap | `comical-image/src/decode.rs` |
 | Rotation wrong | Index mapping or direction | rotation test | `comical-image/src/rotate.rs` |
 | CLI output changed | Format string | `probe` | `comical-cli/src/main.rs` |
+| Viewer opens but canvas is empty | No spread, or `open_book` failed | `App::open_book`, `error` label | `comical-app/src/app.rs` |
+| Page flashes as full size, then splits | Orientation learned after paint | two-pass `draw_book` | `comical-app/src/view.rs` |
+| Landscape page shows wrong half | `PagePart` mapping or midpoint split | `split_size`, `crop_part` | `comical-app/src/app.rs` |
+| Content drifts past canvas edge | Pan clamp bounds | `clamp_pan` | `comical-app/src/view.rs` |
+| Page text spills onto neighbour | Placeholder not clipped | `paint_placeholder`, clip rect | `comical-app/src/view.rs` |
+| Page re-decodes while panning | Texture key missing size, or cache too small | `TextureKey`, cache capacity | `comical-app/src/app.rs` |
+| Page too large or too tall | App passes `scrollbar = 0`; no scrollbars drawn | `ZoomOptions`, `docs/app.md` | `comical-app/src/app.rs` |
 
 Always reproduce first. Add a failing test before changing behavior.
 

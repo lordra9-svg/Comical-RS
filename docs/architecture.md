@@ -6,8 +6,9 @@ A behavior-compatible comic viewer for Windows, macOS and Linux. It reads image
 entries from ZIP, RAR, 7z and directory books. The implementation is MIT. The
 archive readers are permissive third-party crates.
 
-The project is built in slices. The archive, core and image slices are
-implemented. The desktop UI is not.
+The project is built in slices. The archive, core, image and M4 viewer slices
+are implemented. Toolbar, thumbnails, rotation, right-to-left drawing and
+settings are not.
 
 ## Workspace
 
@@ -20,7 +21,10 @@ comical-archive  --->  comical-core
     +--> zip, rars, sevenz-rust
 
 comical-image    --->  image (PNG, JPEG, GIF decode)
-comical-app      (placeholder, future desktop UI)
+
+comical-app  --->  comical-core, comical-archive, comical-image
+    |
+    +--> eframe, egui, rfd, lru, thiserror
 
 xtask            (development only: writes synthetic test archives)
     +--> zip, rars, sevenz-rust writer features
@@ -184,12 +188,13 @@ lock. The current CLI is single-threaded.
 
 ## Current limitations
 
-- `comical-app` is a placeholder. There is no UI.
-- No macOS or Linux CI has run.
+- `comical-app` has no toolbar, thumbnails, rotation, RTL drawing, settings or
+  password prompt. Arrow keys turn pages instead of scrolling.
+- The app does not draw scrollbars; oversized content is panned with the mouse.
+- No macOS or Linux CI has run. The viewer has only been run on Windows.
 - No real-world archive corpus or image corpus has been tested.
 - No fuzzing or malformed-input campaign has run.
 - No natural sort, WebP or AVIF. GIF uses the first frame only.
 - No EXIF orientation handling.
-- No settings, thumbnails, fullscreen, rotation persistence or UI input handling.
 
 See `roadmap.md` for the planned slices.

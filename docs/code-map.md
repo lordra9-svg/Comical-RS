@@ -289,13 +289,37 @@ Details: `docs/image.md`.
 
 ## `comical-app`
 
+Desktop viewer. eframe/egui shell over the three product crates. Details:
+`docs/app.md`.
+
 | File | Owns |
 |---|---|
-| `Cargo.toml` | Placeholder, no dependencies |
-| `src/lib.rs` | Placeholder only |
+| `Cargo.toml` | `eframe`, `egui`, `rfd`, `lru`, `thiserror`, product crates |
+| `src/lib.rs` | Module wiring, `run()`, window defaults (600x400 at 50,50) |
+| `src/main.rs` | `comical` binary, first CLI argument is the book path |
+| `src/app.rs` | `App`, `OpenedBook`, natural and texture caches, opening, navigation, zoom and pan state, orientation learning |
+| `src/view.rs` | Canvas drawing, content geometry, pan clamping, placeholder text |
+| `src/nav.rs` | Keyboard snapshot and map |
+| `src/error.rs` | `AppError` |
+| `tests/open_book.rs` | Directory book opens; page 0 decodes at natural size |
 
-Planned for M4: desktop UI, screen mapping, cache, input and settings. See
-`roadmap.md`.
+Key symbols:
+
+- `App`, `AppError`, `run`.
+- `OpenedBook`, `TextureKey`, `split_size`, `crop_part`.
+- `handle_input`, `Pressed`.
+- `draw`, `draw_book`, `visible_refs`, `page_sizes`, `content_bounds`,
+  `clamp_pan`, `paint_placeholder`.
+
+Invariants:
+
+- `zoom.mode` always mirrors `SpreadState::mode`.
+- Only one `AppError` exists, in `error.rs`.
+- Modules are declared once, in `lib.rs`.
+- `TextureKey` includes the target size, so a zoom change cannot reuse a stale
+  texture.
+- Panning hits the texture cache: no decode, resize or upload.
+- A page that fails to decode does not take down the book.
 
 ## `xtask`
 

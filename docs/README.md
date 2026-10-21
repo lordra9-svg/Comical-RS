@@ -28,14 +28,16 @@ either one.
 3. `core.md`: spread state and zoom math in detail.
 4. `archive.md`: ZIP, RAR, 7z and directory readers in detail.
 5. `image.md`: decode, rotation, filters and golden hashes.
-6. `testing.md`: test layers, fixtures and vectors.
-7. `runbook.md`: build, diagnose, change and release procedures.
-8. `roadmap.md`: placeholders, planned milestones and known gaps.
+6. `app.md`: desktop viewer state, frame sequence, caches and divergences.
+7. `testing.md`: test layers, fixtures and vectors.
+8. `runbook.md`: build, diagnose, change and release procedures.
+9. `roadmap.md`: placeholders, planned milestones and known gaps.
 
 ## Status
 
-The repository contains the M1 archive slice, the M2 core slice and the M3 image
-slice. `comical-app` is still a placeholder. There is no UI yet.
+The repository contains the M1 archive slice, the M2 core slice, the M3 image
+slice and the M4 viewer slice. The viewer runs on Windows and covers the M4
+scope. Toolbar, thumbnails, rotation, RTL, settings and CI are still to come.
 
 ## Documentation rules
 
@@ -56,6 +58,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p xtask -- target/fixtures
 cargo run -p comical-cli -- probe target/fixtures/sample.cbz
 cargo run -p comical-cli -- extract target/fixtures/sample.cbz 0 target/page.bin
+cargo run -p comical-app -- target/fixtures/sample.cbz
 ```
 
 If `cargo` is not found, prepend `%USERPROFILE%\.cargo\bin` to `PATH`.
