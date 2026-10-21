@@ -1,9 +1,25 @@
 [package]
 name = "comical-app"
-description = "Desktop comic viewer"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Desktop viewer GUI for Comical"
+repository.workspace = true
+
+[[bin]]
+name = "comical"
+path = "src/main.rs"
 
 [dependencies]
+eframe = { version = "0.31", features = ["wgpu"] }
+egui = "0.31"
+rfd = "0.17"
+thiserror = "2"
+lru = "0.19"
+comical-core = { workspace = true }
+comical-archive = { workspace = true }
+comical-image = { path = "../comical-image" }
+
+[dev-dependencies]
+tempfile = "3"
