@@ -14,9 +14,11 @@
 //! ```
 
 mod app;
+mod browser;
 mod error;
 mod nav;
 mod settings;
+mod toolbar;
 mod view;
 
 pub use app::App;

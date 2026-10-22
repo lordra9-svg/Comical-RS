@@ -220,6 +220,8 @@ pub struct App {
     orientations: Vec<PageOrientation>,
     /// Per-page rotation state.
     rotations: Vec<Rotation>,
+    /// Thumbnail cache for the browser panel.
+    thumb_cache: crate::browser::ThumbnailCache,
     /// Pages whose orientation changed since the last spread rebuild.
     changed_pages: Vec<usize>,
     /// Zoom and fit settings; `mode` always mirrors the spread state.
@@ -252,6 +254,7 @@ impl App {
             spread: None,
             orientations: Vec::new(),
             rotations: Vec::new(),
+            thumb_cache: crate::browser::ThumbnailCache::new(),
             changed_pages: Vec::new(),
             zoom: ZoomOptions::new(settings.mode, settings.zoom),
             scrollbar_points: 16.0,
@@ -294,6 +297,7 @@ impl App {
         self.orientations = orientations;
         self.rotations = rotations;
         self.changed_pages.clear();
+        self.thumb_cache.clear();
         self.spread = Some(spread);
         self.pan = (0.0, 0.0);
         self.error = None;
@@ -350,6 +354,27 @@ impl App {
     /// Number of pages in the open book.
     pub fn page_count(&self) -> usize {
         self.book.as_ref().map_or(0, |book| book.pages.len())
+    }
+
+    /// Returns a reference to the decoded natural-size image for a page.
+    ///
+    /// Used by the thumbnail browser to generate small previews.
+    pub fn decoded_page(&mut self, page: usize) -> Result<&RgbImage, AppError> {
+        let book = self.book.as_mut().ok_or(AppError::NoBook)?;
+        book.natural(page)
+    }
+
+    /// Jumps to a specific page index.
+    pub fn go_to_page(&mut self, page: usize) {
+        if let Some(spread) = self.spread.as_mut() {
+            spread.go_to_page(page);
+        }
+        self.pan = (0.0, 0.0);
+    }
+
+    /// Returns a mutable reference to the thumbnail cache.
+    pub fn thumb_cache_mut(&mut self) -> &mut crate::browser::ThumbnailCache {
+        &mut self.thumb_cache
     }
 
     /// The oriented full-page size, after rotation.
@@ -578,6 +603,18 @@ impl App {
         self.sync_settings();
     }
 
+    /// Toggle toolbar visibility.
+    pub fn toggle_toolbar(&mut self) {
+        self.settings.toolbar_visible = !self.settings.toolbar_visible;
+        self.sync_settings();
+    }
+
+    /// Toggle thumbnail browser visibility.
+    pub fn toggle_browser(&mut self) {
+        self.settings.browser_visible = !self.settings.browser_visible;
+        self.sync_settings();
+    }
+
     /// The desired window title.
     pub fn title(&self) -> &str {
         &self.title
@@ -690,6 +727,15 @@ impl eframe::App for App {
         }
 
         let consumed = crate::nav::handle_input(ctx, self);
+
+        // Draw toolbar and browser panels before the central canvas.
+        if let Some(action) = crate::toolbar::draw(ctx, self) {
+            crate::toolbar::apply(self, action);
+        }
+        if let Some(action) = crate::browser::draw(ctx, self) {
+            crate::browser::apply(self, action);
+        }
+
         crate::view::draw(ctx, self);
 
         if self.refresh_spread() || consumed {

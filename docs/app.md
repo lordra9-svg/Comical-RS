@@ -4,9 +4,9 @@
 `comical-core` for spreads and zoom, asks `comical-image` for pixels, and paints
 the result on a black canvas. It reimplements no spread or zoom rule.
 
-This is the M4 slice: one window, black canvas, both view modes, five zoom
-modes, keyboard navigation, drag pan, fullscreen, CLI path and file dialog.
-Toolbar, thumbnails, rotation, RTL and settings are not implemented yet.
+This is the M6 slice: one window, black canvas, both view modes, five zoom
+modes, keyboard navigation, drag pan, fullscreen, CLI path, file dialog,
+toolbar, thumbnail browser, per-page rotation, RTL, and persistent settings.
 
 ## Files
 
@@ -117,6 +117,28 @@ draw scrollbars; it pans instead. See the divergences below.
 | F11 | Fullscreen |
 
 Left drag pans. Pan resets on every page, view-mode and zoom change.
+
+## Toolbar (`toolbar.rs`)
+
+A top panel drawn by `egui::TopBottomPanel::top` with ten buttons in spec order:
+rotate left CCW, rotate left CW, first, previous turn, previous page, next
+page, next turn, last, rotate right CCW, rotate right CW. All buttons are
+disabled until a book is open. Visibility defaults to on and is toggled with
+the `T` key; the state syncs to `Settings::toolbar_visible`. The toolbar is
+hidden in fullscreen mode. Button clicks produce a `ToolbarAction` enum that
+`apply()` dispatches to the corresponding `App` method, keeping the immediate-
+mode draw pass free of mutable borrows.
+
+## Thumbnail browser (`browser.rs`)
+
+A left side panel 110 px wide with a white background. Each row is 60 px tall
+with 5 px horizontal and 3 px vertical margins. Thumbnails are generated on
+demand with `comical_image::resize` using the Box filter and cached in an LRU
+cache (`lru::LruCache<usize, TextureHandle>`) keyed by page index. The cache
+lives on `App` and is cleared when a new book is opened. Clicking a row calls
+`SpreadState::go_to_page`. Selection follows the current page. Visibility
+defaults to on and is toggled with the `B` key; the state syncs to
+`Settings::browser_visible`. The browser is hidden in fullscreen mode.
 
 ## Divergences from `spec/behavior.md`
 

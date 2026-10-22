@@ -36,6 +36,8 @@ struct Pressed {
     rotate_left_cw: bool,
     rotate_right_ccw: bool,
     rotate_right_cw: bool,
+    toggle_toolbar: bool,
+    toggle_browser: bool,
 }
 
 /// Mouse wheel actions captured this frame.
@@ -82,6 +84,8 @@ pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
             // Right page rotation: Ctrl+[ / Ctrl+]
             rotate_right_ccw: ctrl && input.key_pressed(Key::OpenBracket),
             rotate_right_cw: ctrl && input.key_pressed(Key::CloseBracket),
+            toggle_toolbar: input.key_pressed(Key::T),
+            toggle_browser: input.key_pressed(Key::B),
         };
         let mut scroll_y = 0.0_f32;
         let mut zoom_delta = 0.0_f32;
@@ -208,6 +212,16 @@ pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
 
     if pressed.toggle_direction {
         app.toggle_direction();
+        consumed = true;
+    }
+
+    if pressed.toggle_toolbar {
+        app.toggle_toolbar();
+        consumed = true;
+    }
+
+    if pressed.toggle_browser {
+        app.toggle_browser();
         consumed = true;
     }
 
