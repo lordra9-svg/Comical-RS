@@ -1,12 +1,19 @@
-//! Keyboard input mapping for the viewer.
+//! Keyboard and pointer input mapping for the viewer.
 
 use comical_core::{ViewMode, ZoomMode};
 use eframe::egui::{Context, Key, ViewportCommand};
 
 use crate::App;
 
+/// Scroll step for arrow keys in canvas points.
+const ARROW_SCROLL_STEP: f32 = 10.0;
+
 /// Snapshot of the keys handled this frame.
 struct Pressed {
+    scroll_up: bool,
+    scroll_down: bool,
+    scroll_left: bool,
+    scroll_right: bool,
     next_turn: bool,
     prev_turn: bool,
     next_page: bool,
@@ -31,22 +38,30 @@ struct Pressed {
     rotate_right_cw: bool,
 }
 
-/// Handle global keyboard navigation, zoom and fullscreen.
+/// Mouse wheel actions captured this frame.
+struct Wheel {
+    /// Vertical scroll delta (positive = scroll down).
+    scroll_y: f32,
+    /// Ctrl+wheel zoom delta (positive = zoom in).
+    zoom_delta: f32,
+}
+
+/// Handle global keyboard navigation, zoom, scrolling and fullscreen.
 ///
 /// Returns `true` if the input was consumed (the app handled it).
 pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
-    let pressed = ctx.input(|input| {
+    let (pressed, wheel) = ctx.input(|input| {
         let shift = input.modifiers.shift;
         let ctrl = input.modifiers.ctrl;
-        Pressed {
-            next_turn: input.key_pressed(Key::ArrowRight)
-                || input.key_pressed(Key::PageDown)
-                || input.key_pressed(Key::J),
-            prev_turn: input.key_pressed(Key::ArrowLeft)
-                || input.key_pressed(Key::PageUp)
-                || input.key_pressed(Key::K),
-            next_page: input.key_pressed(Key::ArrowDown) || input.key_pressed(Key::Space),
-            prev_page: input.key_pressed(Key::ArrowUp) || input.key_pressed(Key::Backspace),
+        let pressed = Pressed {
+            scroll_up: input.key_pressed(Key::ArrowUp),
+            scroll_down: input.key_pressed(Key::ArrowDown),
+            scroll_left: input.key_pressed(Key::ArrowLeft),
+            scroll_right: input.key_pressed(Key::ArrowRight),
+            next_turn: input.key_pressed(Key::PageDown) || input.key_pressed(Key::J),
+            prev_turn: input.key_pressed(Key::PageUp) || input.key_pressed(Key::K),
+            next_page: input.key_pressed(Key::Space),
+            prev_page: input.key_pressed(Key::Backspace),
             first: input.key_pressed(Key::Home),
             last: input.key_pressed(Key::End),
             one_page: input.key_pressed(Key::Num1),
@@ -67,7 +82,19 @@ pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
             // Right page rotation: Ctrl+[ / Ctrl+]
             rotate_right_ccw: ctrl && input.key_pressed(Key::OpenBracket),
             rotate_right_cw: ctrl && input.key_pressed(Key::CloseBracket),
+        };
+        let mut scroll_y = 0.0_f32;
+        let mut zoom_delta = 0.0_f32;
+        for event in &input.events {
+            if let eframe::egui::Event::MouseWheel { delta, modifiers, .. } = event {
+                if modifiers.ctrl {
+                    zoom_delta += delta.y;
+                } else {
+                    scroll_y += delta.y;
+                }
+            }
         }
+        (pressed, Wheel { scroll_y, zoom_delta })
     });
 
     let mut consumed = false;
@@ -90,6 +117,33 @@ pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
         consumed = true;
     } else if pressed.rotate_left_cw {
         app.rotate_left_page_cw();
+        consumed = true;
+    }
+
+    // Arrow keys scroll the viewport.
+    if !consumed && pressed.scroll_up {
+        app.scroll((0.0, ARROW_SCROLL_STEP));
+        consumed = true;
+    } else if !consumed && pressed.scroll_down {
+        app.scroll((0.0, -ARROW_SCROLL_STEP));
+        consumed = true;
+    } else if !consumed && pressed.scroll_left {
+        app.scroll((ARROW_SCROLL_STEP, 0.0));
+        consumed = true;
+    } else if !consumed && pressed.scroll_right {
+        app.scroll((-ARROW_SCROLL_STEP, 0.0));
+        consumed = true;
+    }
+
+    // Mouse wheel: vertical scrolls, Ctrl+wheel zooms.
+    if wheel.zoom_delta != 0.0 {
+        let steps = (wheel.zoom_delta / 10.0).round() as i32;
+        if steps != 0 {
+            app.adjust_custom_percent(steps * 10);
+            consumed = true;
+        }
+    } else if wheel.scroll_y != 0.0 {
+        app.scroll((0.0, wheel.scroll_y));
         consumed = true;
     }
 

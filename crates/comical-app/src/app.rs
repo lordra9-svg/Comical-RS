@@ -223,6 +223,9 @@ pub struct App {
     changed_pages: Vec<usize>,
     /// Zoom and fit settings; `mode` always mirrors the spread state.
     zoom: ZoomOptions,
+    /// Scrollbar thickness in logical points. Converted to physical pixels
+    /// before passing to zoom calculations.
+    scrollbar_points: f32,
     /// Pan offset in canvas points.
     pan: (f32, f32),
     /// Whether the window is fullscreen.
@@ -247,6 +250,7 @@ impl App {
             rotations: Vec::new(),
             changed_pages: Vec::new(),
             zoom: ZoomOptions::new(ViewMode::TwoPage, ZoomMode::Width),
+            scrollbar_points: 16.0,
             pan: (0.0, 0.0),
             fullscreen: false,
             direction: Direction::default(),
@@ -508,6 +512,20 @@ impl App {
     /// Replace the pan offset.
     pub fn set_pan(&mut self, pan: (f32, f32)) {
         self.pan = pan;
+    }
+
+    /// Update the zoom scrollbar thickness from the current pixels-per-point.
+    ///
+    /// Call once per frame before zoom calculations so the reserved space
+    /// matches the display density.
+    pub fn update_scrollbar(&mut self, pixels_per_point: f32) {
+        let physical = (self.scrollbar_points * pixels_per_point).round().max(1.0) as u32;
+        self.zoom.scrollbar = physical;
+    }
+
+    /// Scroll by a delta in canvas points.
+    pub fn scroll(&mut self, delta: (f32, f32)) {
+        self.pan = (self.pan.0 + delta.0, self.pan.1 + delta.1);
     }
 
     /// Whether the window is fullscreen.
@@ -893,5 +911,59 @@ mod tests {
 
         // Left page should still be North
         assert_eq!(app.page_rotation(spread.left.page), Rotation::North);
+    }
+
+    #[test]
+    fn update_scrollbar_sets_physical_thickness_from_ppp() {
+        let mut app = App::new();
+        app.update_scrollbar(1.0);
+        assert_eq!(app.zoom().scrollbar, 16);
+
+        app.update_scrollbar(2.0);
+        assert_eq!(app.zoom().scrollbar, 32);
+
+        app.update_scrollbar(1.5);
+        assert_eq!(app.zoom().scrollbar, 24);
+    }
+
+    #[test]
+    fn scroll_adjusts_pan_offset() {
+        let mut app = App::new();
+        assert_eq!(app.pan(), (0.0, 0.0));
+
+        app.scroll((5.0, -10.0));
+        assert_eq!(app.pan(), (5.0, -10.0));
+
+        app.scroll((-2.0, 3.0));
+        assert_eq!(app.pan(), (3.0, -7.0));
+    }
+
+    #[test]
+    fn all_navigation_methods_reset_pan_to_origin() {
+        let mut app = app_with_pages(vec![PageOrientation::Portrait; 6]);
+
+        app.set_pan((50.0, -100.0));
+        app.next_turn();
+        assert_eq!(app.pan(), (0.0, 0.0));
+
+        app.set_pan((50.0, -100.0));
+        app.prev_turn();
+        assert_eq!(app.pan(), (0.0, 0.0));
+
+        app.set_pan((50.0, -100.0));
+        app.next_page();
+        assert_eq!(app.pan(), (0.0, 0.0));
+
+        app.set_pan((50.0, -100.0));
+        app.prev_page();
+        assert_eq!(app.pan(), (0.0, 0.0));
+
+        app.set_pan((50.0, -100.0));
+        app.first();
+        assert_eq!(app.pan(), (0.0, 0.0));
+
+        app.set_pan((50.0, -100.0));
+        app.last();
+        assert_eq!(app.pan(), (0.0, 0.0));
     }
 }

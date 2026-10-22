@@ -44,7 +44,7 @@ fn draw_welcome(ui: &mut eframe::egui::Ui, app: &mut App) {
         ui.add_space(12.0);
         ui.label(
             eframe::egui::RichText::new(
-                "Arrow keys navigate, 1/2 change view mode, F11 toggles fullscreen",
+                "Arrows scroll, PgUp/PgDn turn pages, 1/2 change view, F11 fullscreen",
             )
             .small()
             .color(Color32::GRAY),
@@ -58,6 +58,7 @@ fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
     };
     let canvas_rect = ui.max_rect();
     let ppp = ctx.pixels_per_point().max(f32::EPSILON);
+    app.update_scrollbar(ppp);
     let canvas = Size::new(
         (canvas_rect.width() * ppp).round().max(1.0) as u32,
         (canvas_rect.height() * ppp).round().max(1.0) as u32,
@@ -170,6 +171,63 @@ fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
         }
 
         x += width;
+    }
+
+    // Draw scrollbar indicators when content overflows the viewport.
+    let sb_thickness = options.scrollbar as f32 / ppp;
+    let overflow_x = content.width() > canvas_rect.width();
+    let overflow_y = content.height() > canvas_rect.height();
+
+    if overflow_y {
+        // Vertical scrollbar on the right edge.
+        let track_x = canvas_rect.right() - sb_thickness;
+        let track = Rect::from_min_max(
+            Pos2::new(track_x, canvas_rect.top()),
+            Pos2::new(canvas_rect.right(), canvas_rect.bottom()),
+        );
+        painter.rect_filled(track, 0.0, Color32::from_gray(32));
+
+        // Thumb position based on pan offset relative to scrollable range.
+        let scrollable = content.height() - canvas_rect.height();
+        let view_ratio = canvas_rect.height() / content.height();
+        let thumb_height = (canvas_rect.height() * view_ratio).max(20.0);
+        let scroll_frac = if scrollable > 0.0 {
+            (-pan.1 - content.top()) / scrollable
+        } else {
+            0.0
+        };
+        let thumb_y = canvas_rect.top() + scroll_frac * (canvas_rect.height() - thumb_height);
+        let thumb = Rect::from_min_max(
+            Pos2::new(track_x, thumb_y),
+            Pos2::new(canvas_rect.right(), thumb_y + thumb_height),
+        );
+        painter.rect_filled(thumb, 0.0, Color32::from_gray(96));
+    }
+
+    if overflow_x {
+        // Horizontal scrollbar on the bottom edge.
+        let track_y = canvas_rect.bottom() - sb_thickness;
+        let track = Rect::from_min_max(
+            Pos2::new(canvas_rect.left(), track_y),
+            Pos2::new(canvas_rect.right(), canvas_rect.bottom()),
+        );
+        painter.rect_filled(track, 0.0, Color32::from_gray(32));
+
+        // Thumb position based on pan offset relative to scrollable range.
+        let scrollable = content.width() - canvas_rect.width();
+        let view_ratio = canvas_rect.width() / content.width();
+        let thumb_width = (canvas_rect.width() * view_ratio).max(20.0);
+        let scroll_frac = if scrollable > 0.0 {
+            (-pan.0 - content.left()) / scrollable
+        } else {
+            0.0
+        };
+        let thumb_x = canvas_rect.left() + scroll_frac * (canvas_rect.width() - thumb_width);
+        let thumb = Rect::from_min_max(
+            Pos2::new(thumb_x, track_y),
+            Pos2::new(thumb_x + thumb_width, canvas_rect.bottom()),
+        );
+        painter.rect_filled(thumb, 0.0, Color32::from_gray(96));
     }
 
     painter.text(
