@@ -79,8 +79,10 @@ pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
             fullscreen: input.key_pressed(Key::F11),
             toggle_direction: input.key_pressed(Key::D),
             // Rotation: [ or Shift+Left for left page CCW, ] or Shift+Right for left page CW
-            rotate_left_ccw: input.key_pressed(Key::OpenBracket) || (shift && input.key_pressed(Key::ArrowLeft)),
-            rotate_left_cw: input.key_pressed(Key::CloseBracket) || (shift && input.key_pressed(Key::ArrowRight)),
+            rotate_left_ccw: input.key_pressed(Key::OpenBracket)
+                || (shift && input.key_pressed(Key::ArrowLeft)),
+            rotate_left_cw: input.key_pressed(Key::CloseBracket)
+                || (shift && input.key_pressed(Key::ArrowRight)),
             // Right page rotation: Ctrl+[ / Ctrl+]
             rotate_right_ccw: ctrl && input.key_pressed(Key::OpenBracket),
             rotate_right_cw: ctrl && input.key_pressed(Key::CloseBracket),
@@ -90,7 +92,10 @@ pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
         let mut scroll_y = 0.0_f32;
         let mut zoom_delta = 0.0_f32;
         for event in &input.events {
-            if let eframe::egui::Event::MouseWheel { delta, modifiers, .. } = event {
+            if let eframe::egui::Event::MouseWheel {
+                delta, modifiers, ..
+            } = event
+            {
                 if modifiers.ctrl {
                     zoom_delta += delta.y;
                 } else {
@@ -98,7 +103,13 @@ pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
                 }
             }
         }
-        (pressed, Wheel { scroll_y, zoom_delta })
+        (
+            pressed,
+            Wheel {
+                scroll_y,
+                zoom_delta,
+            },
+        )
     });
 
     let mut consumed = false;

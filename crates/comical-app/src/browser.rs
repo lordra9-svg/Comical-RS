@@ -46,9 +46,7 @@ pub struct ThumbnailCache {
 impl ThumbnailCache {
     pub fn new() -> Self {
         Self {
-            textures: LruCache::new(
-                NonZeroUsize::new(THUMB_CACHE_SIZE).expect("non-zero"),
-            ),
+            textures: LruCache::new(NonZeroUsize::new(THUMB_CACHE_SIZE).expect("non-zero")),
         }
     }
 

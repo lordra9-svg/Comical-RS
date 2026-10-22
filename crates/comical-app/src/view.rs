@@ -240,7 +240,9 @@ fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
         canvas_rect.bottom() - 18.0
     };
     let total = app.page_count();
-    let is_two_distinct_pages = spread.right.is_some_and(|right| right.page != spread.left.page);
+    let is_two_distinct_pages = spread
+        .right
+        .is_some_and(|right| right.page != spread.left.page);
 
     if is_two_distinct_pages {
         // Two distinct pages: draw separate labels near the bottom of each page area.
@@ -454,8 +456,14 @@ mod tests {
     fn visible_refs_ltr_keeps_book_order() {
         use comical_core::{PageRef, Spread};
         let spread = Spread {
-            left: PageRef { page: 0, part: PagePart::Full },
-            right: Some(PageRef { page: 1, part: PagePart::Full }),
+            left: PageRef {
+                page: 0,
+                part: PagePart::Full,
+            },
+            right: Some(PageRef {
+                page: 1,
+                part: PagePart::Full,
+            }),
         };
         let refs = visible_refs(&spread, Direction::Ltr);
         assert_eq!(refs.len(), 2);
@@ -467,8 +475,14 @@ mod tests {
     fn visible_refs_rtl_swaps_screen_order() {
         use comical_core::{PageRef, Spread};
         let spread = Spread {
-            left: PageRef { page: 0, part: PagePart::Full },
-            right: Some(PageRef { page: 1, part: PagePart::Full }),
+            left: PageRef {
+                page: 0,
+                part: PagePart::Full,
+            },
+            right: Some(PageRef {
+                page: 1,
+                part: PagePart::Full,
+            }),
         };
         let refs = visible_refs(&spread, Direction::Rtl);
         assert_eq!(refs.len(), 2);
@@ -480,7 +494,10 @@ mod tests {
     fn visible_refs_single_page_unchanged_by_direction() {
         use comical_core::{PageRef, Spread};
         let spread = Spread {
-            left: PageRef { page: 3, part: PagePart::Full },
+            left: PageRef {
+                page: 3,
+                part: PagePart::Full,
+            },
             right: None,
         };
         let ltr = visible_refs(&spread, Direction::Ltr);
@@ -492,30 +509,56 @@ mod tests {
 
     #[test]
     fn effective_part_ltr_preserves_parts() {
-        assert_eq!(effective_part(PagePart::Left, Direction::Ltr), PagePart::Left);
-        assert_eq!(effective_part(PagePart::Right, Direction::Ltr), PagePart::Right);
-        assert_eq!(effective_part(PagePart::Full, Direction::Ltr), PagePart::Full);
+        assert_eq!(
+            effective_part(PagePart::Left, Direction::Ltr),
+            PagePart::Left
+        );
+        assert_eq!(
+            effective_part(PagePart::Right, Direction::Ltr),
+            PagePart::Right
+        );
+        assert_eq!(
+            effective_part(PagePart::Full, Direction::Ltr),
+            PagePart::Full
+        );
     }
 
     #[test]
     fn effective_part_rtl_swaps_left_and_right() {
-        assert_eq!(effective_part(PagePart::Left, Direction::Rtl), PagePart::Right);
-        assert_eq!(effective_part(PagePart::Right, Direction::Rtl), PagePart::Left);
-        assert_eq!(effective_part(PagePart::Full, Direction::Rtl), PagePart::Full);
+        assert_eq!(
+            effective_part(PagePart::Left, Direction::Rtl),
+            PagePart::Right
+        );
+        assert_eq!(
+            effective_part(PagePart::Right, Direction::Rtl),
+            PagePart::Left
+        );
+        assert_eq!(
+            effective_part(PagePart::Full, Direction::Rtl),
+            PagePart::Full
+        );
     }
 
     /// Determines whether a spread should show two separate labels or one centered label.
     /// Returns true if the spread has two distinct pages (different page indices).
     fn is_two_distinct_pages(spread: &Spread) -> bool {
-        spread.right.is_some_and(|right| right.page != spread.left.page)
+        spread
+            .right
+            .is_some_and(|right| right.page != spread.left.page)
     }
 
     #[test]
     fn two_distinct_pages_shows_separate_labels() {
         use comical_core::{PageRef, Spread};
         let spread = Spread {
-            left: PageRef { page: 0, part: PagePart::Full },
-            right: Some(PageRef { page: 1, part: PagePart::Full }),
+            left: PageRef {
+                page: 0,
+                part: PagePart::Full,
+            },
+            right: Some(PageRef {
+                page: 1,
+                part: PagePart::Full,
+            }),
         };
         assert!(is_two_distinct_pages(&spread));
     }
@@ -524,7 +567,10 @@ mod tests {
     fn single_page_shows_centered_label() {
         use comical_core::{PageRef, Spread};
         let spread = Spread {
-            left: PageRef { page: 3, part: PagePart::Full },
+            left: PageRef {
+                page: 3,
+                part: PagePart::Full,
+            },
             right: None,
         };
         assert!(!is_two_distinct_pages(&spread));
@@ -535,8 +581,14 @@ mod tests {
         use comical_core::{PageRef, Spread};
         // Split landscape: same page index, different parts
         let spread = Spread {
-            left: PageRef { page: 2, part: PagePart::Left },
-            right: Some(PageRef { page: 2, part: PagePart::Right }),
+            left: PageRef {
+                page: 2,
+                part: PagePart::Left,
+            },
+            right: Some(PageRef {
+                page: 2,
+                part: PagePart::Right,
+            }),
         };
         assert!(!is_two_distinct_pages(&spread));
     }
@@ -547,8 +599,14 @@ mod tests {
         // In LTR, book-order left (page 0) is on screen left, book-order right (page 1) is on screen right.
         // So screen-left label shows page 0, screen-right label shows page 1.
         let spread = Spread {
-            left: PageRef { page: 0, part: PagePart::Full },
-            right: Some(PageRef { page: 1, part: PagePart::Full }),
+            left: PageRef {
+                page: 0,
+                part: PagePart::Full,
+            },
+            right: Some(PageRef {
+                page: 1,
+                part: PagePart::Full,
+            }),
         };
         let refs = visible_refs(&spread, Direction::Ltr);
         assert_eq!(refs[0].page, 0); // screen left
@@ -561,8 +619,14 @@ mod tests {
         // In RTL, book-order left (page 0) is on screen RIGHT, book-order right (page 1) is on screen LEFT.
         // So screen-left label shows page 1, screen-right label shows page 0.
         let spread = Spread {
-            left: PageRef { page: 0, part: PagePart::Full },
-            right: Some(PageRef { page: 1, part: PagePart::Full }),
+            left: PageRef {
+                page: 0,
+                part: PagePart::Full,
+            },
+            right: Some(PageRef {
+                page: 1,
+                part: PagePart::Full,
+            }),
         };
         let refs = visible_refs(&spread, Direction::Rtl);
         assert_eq!(refs[0].page, 1); // screen left (book-order right)
