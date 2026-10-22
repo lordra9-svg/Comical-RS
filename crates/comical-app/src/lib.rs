@@ -16,10 +16,12 @@
 mod app;
 mod error;
 mod nav;
+mod settings;
 mod view;
 
 pub use app::App;
 pub use error::AppError;
+pub use settings::Settings;
 
 use eframe::egui;
 
@@ -38,10 +40,11 @@ pub fn run(path: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
         app.show_error(error.to_string());
     }
 
+    let s = app.settings();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([600.0, 400.0])
-            .with_position([50.0, 50.0])
+            .with_inner_size([s.window_width as f32, s.window_height as f32])
+            .with_position([s.window_x as f32, s.window_y as f32])
             .with_title("comical"),
         ..Default::default()
     };

@@ -17,6 +17,7 @@ use eframe::egui::{ColorImage, Context, TextureHandle, TextureOptions};
 use lru::LruCache;
 
 use crate::error::AppError;
+use crate::settings::Settings;
 
 /// Number of decoded pages and uploaded textures kept in memory.
 const CACHE_PAGES: usize = 10;
@@ -232,6 +233,8 @@ pub struct App {
     fullscreen: bool,
     /// Reading direction for two-page spreads.
     direction: Direction,
+    /// Persistent application settings.
+    settings: Settings,
     /// Last error message, drawn in the canvas.
     error: Option<String>,
     /// Window title, normally the file name.
@@ -241,23 +244,38 @@ pub struct App {
 }
 
 impl App {
-    /// Creates an empty application with the behavior-spec defaults.
+    /// Creates an empty application, loading persisted settings from disk.
     pub fn new() -> Self {
+        let settings = Settings::load();
         Self {
             book: None,
             spread: None,
             orientations: Vec::new(),
             rotations: Vec::new(),
             changed_pages: Vec::new(),
-            zoom: ZoomOptions::new(ViewMode::TwoPage, ZoomMode::Width),
+            zoom: ZoomOptions::new(settings.mode, settings.zoom),
             scrollbar_points: 16.0,
             pan: (0.0, 0.0),
             fullscreen: false,
-            direction: Direction::default(),
+            direction: settings.direction,
+            settings,
             error: None,
             title: "comical".to_owned(),
             title_dirty: true,
         }
+    }
+
+    /// Returns a reference to the current settings.
+    pub fn settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    /// Syncs mutable app state back into the settings struct.
+    fn sync_settings(&mut self) {
+        self.settings.zoom = self.zoom.zoom;
+        self.settings.zoom_percent = self.zoom.custom_percent;
+        self.settings.mode = self.zoom.mode;
+        self.settings.direction = self.direction;
     }
 
     /// Open the book at `path` and prepare the navigation model.
@@ -551,11 +569,13 @@ impl App {
     /// Set the reading direction.
     pub fn set_direction(&mut self, direction: Direction) {
         self.direction = direction;
+        self.sync_settings();
     }
 
     /// Toggle between LTR and RTL reading direction.
     pub fn toggle_direction(&mut self) {
         self.direction = self.direction.toggled();
+        self.sync_settings();
     }
 
     /// The desired window title.
@@ -618,12 +638,14 @@ impl App {
         }
         self.zoom.mode = mode;
         self.pan = (0.0, 0.0);
+        self.sync_settings();
     }
 
     /// Selects a zoom mode.
     pub fn set_zoom_mode(&mut self, mode: ZoomMode) {
         self.zoom.zoom = mode;
         self.pan = (0.0, 0.0);
+        self.sync_settings();
     }
 
     /// Cycles Fit, Width, Height, Full, Custom, Fit.
@@ -636,6 +658,7 @@ impl App {
             ZoomMode::Custom => ZoomMode::Fit,
         };
         self.pan = (0.0, 0.0);
+        self.sync_settings();
     }
 
     /// Changes the custom percentage and selects custom zoom.
@@ -649,6 +672,7 @@ impl App {
         self.zoom.custom_percent = percent.clamp(MIN_CUSTOM_PERCENT, MAX_CUSTOM_PERCENT);
         self.zoom.zoom = ZoomMode::Custom;
         self.pan = (0.0, 0.0);
+        self.sync_settings();
     }
 }
 
@@ -671,6 +695,11 @@ impl eframe::App for App {
         if self.refresh_spread() || consumed {
             ctx.request_repaint();
         }
+    }
+
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.sync_settings();
+        self.settings.save();
     }
 }
 
