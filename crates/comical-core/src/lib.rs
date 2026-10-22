@@ -4,9 +4,13 @@
 //! and zoom geometry. It performs no file I/O and has no UI, image or archive
 //! dependencies.
 
+mod direction;
+mod rotation;
 mod spread;
 mod zoom;
 
+pub use direction::Direction;
+pub use rotation::Rotation;
 pub use spread::{PageOrientation, PagePart, PageRef, Spread, SpreadError, SpreadState, ViewMode};
 pub use zoom::{
     MAX_CUSTOM_PERCENT, MIN_CUSTOM_PERCENT, Size, ZoomMode, ZoomOptions, ZoomResult, compute_zoom,

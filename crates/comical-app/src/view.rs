@@ -1,7 +1,7 @@
 //! Canvas drawing: black background, centered page image(s), pan support,
 //! error display, and the "Open a book" button when no book is loaded.
 
-use comical_core::{PageRef, Size, Spread, compute_zoom_with_neighbors};
+use comical_core::{Direction, PagePart, PageRef, Size, Spread, compute_zoom_with_neighbors};
 use eframe::egui::{
     Align2, Color32, Context, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2,
 };
@@ -68,13 +68,14 @@ fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
     // A page first seen as landscape changes the spread, so re-resolve the refs
     // and fill in sizes for any page the new spread added. This keeps a split
     // landscape page from flashing as a full portrait page for one frame.
-    let mut refs = visible_refs(&spread);
+    let direction = app.direction();
+    let mut refs = visible_refs(&spread, direction);
     let mut natural = page_sizes(app, &refs);
     if app.refresh_spread()
         && let Some(updated) = app.current_spread()
     {
         spread = updated;
-        let updated_refs = visible_refs(&spread);
+        let updated_refs = visible_refs(&spread, direction);
         natural = updated_refs
             .iter()
             .map(|page_ref| {
@@ -106,7 +107,8 @@ fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
         };
         targets.push(target);
 
-        match app.texture(ctx, page_ref.page, page_ref.part, target) {
+        let fetch_part = effective_part(page_ref.part, direction);
+        match app.texture(ctx, page_ref.page, fetch_part, target) {
             Ok(handle) => {
                 handles.push(Some(handle));
                 errors.push(None);
@@ -173,7 +175,7 @@ fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
     painter.text(
         Pos2::new(canvas_rect.center().x, canvas_rect.bottom() - 18.0),
         Align2::CENTER_CENTER,
-        page_label(app, &spread),
+        page_label(app, &spread, direction),
         FontId::proportional(13.0),
         Color32::from_gray(160),
     );
@@ -190,10 +192,30 @@ fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
 }
 
 /// Page references of the visible spread in screen order.
-fn visible_refs(spread: &Spread) -> Vec<PageRef> {
+///
+/// In RTL mode the book-order left page is drawn on the screen right, so the
+/// screen-left slot gets the book-order right page (if any).
+fn visible_refs(spread: &Spread, direction: Direction) -> Vec<PageRef> {
     match spread.right {
+        Some(right) if direction.is_rtl() => vec![right, spread.left],
         Some(right) => vec![spread.left, right],
         None => vec![spread.left],
+    }
+}
+
+/// The pixel half to fetch for a given book-order part and direction.
+///
+/// In RTL mode a split landscape page must show its right pixel half on the
+/// screen left (where the book-order left page now sits), so the part is
+/// swapped before cropping.
+fn effective_part(part: PagePart, direction: Direction) -> PagePart {
+    if !direction.is_rtl() || part == PagePart::Full {
+        return part;
+    }
+    match part {
+        PagePart::Left => PagePart::Right,
+        PagePart::Right => PagePart::Left,
+        PagePart::Full => PagePart::Full,
     }
 }
 
@@ -234,11 +256,17 @@ fn paint_placeholder(painter: &eframe::egui::Painter, rect: Rect, message: &str)
     painter.galley(inner.center() - size / 2.0, galley, Color32::LIGHT_RED);
 }
 
-fn page_label(app: &App, spread: &Spread) -> String {
+fn page_label(app: &App, spread: &Spread, direction: Direction) -> String {
     let total = app.page_count();
     match spread.right {
         Some(right) if right.page != spread.left.page => {
-            format!("{} - {} of {}", spread.left.page + 1, right.page + 1, total)
+            let left_num = spread.left.page + 1;
+            let right_num = right.page + 1;
+            if direction.is_rtl() {
+                format!("{right_num} - {left_num} of {total}")
+            } else {
+                format!("{left_num} - {right_num} of {total}")
+            }
         }
         _ => format!("{} of {}", spread.left.page + 1, total),
     }
@@ -327,5 +355,59 @@ mod tests {
         let canvas = Vec2::new(800.0, 600.0);
         let content = Rect::from_min_max(Pos2::new(100.0, 100.0), Pos2::new(700.0, 500.0));
         assert_eq!(clamp_pan((50.0, 50.0), canvas, content), (0.0, 0.0));
+    }
+
+    #[test]
+    fn visible_refs_ltr_keeps_book_order() {
+        use comical_core::{PageRef, Spread};
+        let spread = Spread {
+            left: PageRef { page: 0, part: PagePart::Full },
+            right: Some(PageRef { page: 1, part: PagePart::Full }),
+        };
+        let refs = visible_refs(&spread, Direction::Ltr);
+        assert_eq!(refs.len(), 2);
+        assert_eq!(refs[0].page, 0);
+        assert_eq!(refs[1].page, 1);
+    }
+
+    #[test]
+    fn visible_refs_rtl_swaps_screen_order() {
+        use comical_core::{PageRef, Spread};
+        let spread = Spread {
+            left: PageRef { page: 0, part: PagePart::Full },
+            right: Some(PageRef { page: 1, part: PagePart::Full }),
+        };
+        let refs = visible_refs(&spread, Direction::Rtl);
+        assert_eq!(refs.len(), 2);
+        assert_eq!(refs[0].page, 1);
+        assert_eq!(refs[1].page, 0);
+    }
+
+    #[test]
+    fn visible_refs_single_page_unchanged_by_direction() {
+        use comical_core::{PageRef, Spread};
+        let spread = Spread {
+            left: PageRef { page: 3, part: PagePart::Full },
+            right: None,
+        };
+        let ltr = visible_refs(&spread, Direction::Ltr);
+        let rtl = visible_refs(&spread, Direction::Rtl);
+        assert_eq!(ltr, rtl);
+        assert_eq!(ltr.len(), 1);
+        assert_eq!(ltr[0].page, 3);
+    }
+
+    #[test]
+    fn effective_part_ltr_preserves_parts() {
+        assert_eq!(effective_part(PagePart::Left, Direction::Ltr), PagePart::Left);
+        assert_eq!(effective_part(PagePart::Right, Direction::Ltr), PagePart::Right);
+        assert_eq!(effective_part(PagePart::Full, Direction::Ltr), PagePart::Full);
+    }
+
+    #[test]
+    fn effective_part_rtl_swaps_left_and_right() {
+        assert_eq!(effective_part(PagePart::Left, Direction::Rtl), PagePart::Right);
+        assert_eq!(effective_part(PagePart::Right, Direction::Rtl), PagePart::Left);
+        assert_eq!(effective_part(PagePart::Full, Direction::Rtl), PagePart::Full);
     }
 }

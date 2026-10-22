@@ -9,10 +9,10 @@ use std::path::Path;
 
 use comical_archive::{ComicArchive, DEFAULT_MAX_ENTRY_BYTES};
 use comical_core::{
-    MAX_CUSTOM_PERCENT, MIN_CUSTOM_PERCENT, PageEntry, PageOrientation, PagePart, PageRef, Size,
-    Spread, SpreadState, ViewMode, ZoomMode, ZoomOptions,
+    Direction, MAX_CUSTOM_PERCENT, MIN_CUSTOM_PERCENT, PageEntry, PageOrientation, PagePart,
+    PageRef, Rotation, Size, Spread, SpreadState, ViewMode, ZoomMode, ZoomOptions,
 };
-use comical_image::{Filter, RgbImage, decode, resize};
+use comical_image::{Filter, RgbImage, decode, resize, rotate as image_rotate};
 use eframe::egui::{ColorImage, Context, TextureHandle, TextureOptions};
 use lru::LruCache;
 
@@ -34,6 +34,7 @@ struct TextureKey {
     part: PagePart,
     width: u32,
     height: u32,
+    rotation: Rotation,
 }
 
 /// A currently open book and its per-book caches.
@@ -80,6 +81,16 @@ impl OpenedBook {
             *slot = Some(size);
         }
         Ok(size)
+    }
+
+    /// Returns the oriented size after applying rotation.
+    fn oriented_size(&mut self, page: usize, rotation: Rotation) -> Result<Size, AppError> {
+        let natural = self.natural_size(page)?;
+        if rotation.swaps_dimensions() {
+            Ok(Size::new(natural.height, natural.width))
+        } else {
+            Ok(natural)
+        }
     }
 
     /// Returns the decoded page at natural size, reading it on first use.
@@ -138,12 +149,14 @@ impl OpenedBook {
         page: usize,
         part: PagePart,
         target: Size,
+        rotation: Rotation,
     ) -> Result<TextureHandle, AppError> {
         let key = TextureKey {
             page,
             part,
             width: target.width,
             height: target.height,
+            rotation,
         };
         if let Some(handle) = self.textures.get(&key) {
             return Ok(handle.clone());
@@ -151,14 +164,21 @@ impl OpenedBook {
 
         let image = {
             let natural = self.natural(page)?;
+            // Apply rotation before cropping/resizing
+            let rotated = if rotation != Rotation::North {
+                image_rotate(natural, rotation_to_image(rotation))
+            } else {
+                natural.clone()
+            };
+
             if part == PagePart::Full {
-                if natural.width() == target.width && natural.height() == target.height {
-                    natural.clone()
+                if rotated.width() == target.width && rotated.height() == target.height {
+                    rotated
                 } else {
-                    resize(natural, target.width, target.height, RESAMPLE_FILTER)?
+                    resize(&rotated, target.width, target.height, RESAMPLE_FILTER)?
                 }
             } else {
-                let cropped = crop_part(natural, part)?;
+                let cropped = crop_part(&rotated, part)?;
                 if cropped.width() == target.width && cropped.height() == target.height {
                     cropped
                 } else {
@@ -169,10 +189,23 @@ impl OpenedBook {
 
         let size = [image.width() as usize, image.height() as usize];
         let color = ColorImage::from_rgb(size, image.pixels());
-        let name = format!("page-{page}-{part:?}-{}x{}", target.width, target.height);
+        let name = format!(
+            "page-{page}-{part:?}-{}x{}-{:?}",
+            target.width, target.height, rotation
+        );
         let handle = ctx.load_texture(name, color, TextureOptions::LINEAR);
         self.textures.put(key, handle.clone());
         Ok(handle)
+    }
+}
+
+/// Converts core Rotation to image Rotation.
+fn rotation_to_image(rotation: Rotation) -> comical_image::Rotation {
+    match rotation {
+        Rotation::North => comical_image::Rotation::None,
+        Rotation::East => comical_image::Rotation::Cw90,
+        Rotation::South => comical_image::Rotation::Cw180,
+        Rotation::West => comical_image::Rotation::Cw270,
     }
 }
 
@@ -184,6 +217,8 @@ pub struct App {
     spread: Option<SpreadState>,
     /// Orientation of every page, refined as pages are decoded.
     orientations: Vec<PageOrientation>,
+    /// Per-page rotation state.
+    rotations: Vec<Rotation>,
     /// Pages whose orientation changed since the last spread rebuild.
     changed_pages: Vec<usize>,
     /// Zoom and fit settings; `mode` always mirrors the spread state.
@@ -192,6 +227,8 @@ pub struct App {
     pan: (f32, f32),
     /// Whether the window is fullscreen.
     fullscreen: bool,
+    /// Reading direction for two-page spreads.
+    direction: Direction,
     /// Last error message, drawn in the canvas.
     error: Option<String>,
     /// Window title, normally the file name.
@@ -207,10 +244,12 @@ impl App {
             book: None,
             spread: None,
             orientations: Vec::new(),
+            rotations: Vec::new(),
             changed_pages: Vec::new(),
             zoom: ZoomOptions::new(ViewMode::TwoPage, ZoomMode::Width),
             pan: (0.0, 0.0),
             fullscreen: false,
+            direction: Direction::default(),
             error: None,
             title: "comical".to_owned(),
             title_dirty: true,
@@ -225,11 +264,13 @@ impl App {
         let archive = comical_archive::open(path)?;
         let count = archive.pages().len();
         let orientations = vec![PageOrientation::Portrait; count];
+        let rotations = vec![Rotation::North; count];
         let spread = SpreadState::new(orientations.clone(), self.zoom.mode)?;
         let book = OpenedBook::new(archive);
 
         self.book = Some(book);
         self.orientations = orientations;
+        self.rotations = rotations;
         self.changed_pages.clear();
         self.spread = Some(spread);
         self.pan = (0.0, 0.0);
@@ -289,17 +330,23 @@ impl App {
         self.book.as_ref().map_or(0, |book| book.pages.len())
     }
 
-    /// The natural full-page size, after rotation.
+    /// The oriented full-page size, after rotation.
     ///
     /// The first call for a page decodes it. Learning its orientation may mark
     /// the spread for a rebuild on the next frame.
     pub fn page_size(&mut self, page: usize) -> Result<Size, AppError> {
-        let natural = {
+        let rotation = self.rotations.get(page).copied().unwrap_or_default();
+        let oriented = {
             let book = self.book.as_mut().ok_or(AppError::NoBook)?;
-            book.natural_size(page)?
+            book.oriented_size(page, rotation)?
         };
-        self.learn_orientation(page, natural);
-        Ok(natural)
+        self.learn_orientation(page, oriented);
+        Ok(oriented)
+    }
+
+    /// Returns the rotation for a page.
+    pub fn page_rotation(&self, page: usize) -> Rotation {
+        self.rotations.get(page).copied().unwrap_or_default()
     }
 
     /// Returns a cached, uploaded texture for the requested target size.
@@ -310,8 +357,9 @@ impl App {
         part: PagePart,
         target: Size,
     ) -> Result<TextureHandle, AppError> {
+        let rotation = self.rotations.get(page).copied().unwrap_or_default();
         let book = self.book.as_mut().ok_or(AppError::NoBook)?;
-        book.texture(ctx, page, part, target)
+        book.texture(ctx, page, part, target, rotation)
     }
 
     fn learn_orientation(&mut self, page: usize, size: Size) {
@@ -325,6 +373,70 @@ impl App {
         if changed {
             self.orientations[page] = orientation;
             self.changed_pages.push(page);
+        }
+    }
+
+    /// Rotates the left page of the current spread counter-clockwise.
+    pub fn rotate_left_page_ccw(&mut self) {
+        let Some(spread) = self.spread.as_ref() else {
+            return;
+        };
+        let page = spread.spread().left.page;
+        if let Some(rotation) = self.rotations.get_mut(page) {
+            *rotation = rotation.counter_clockwise();
+            self.changed_pages.push(page);
+        }
+    }
+
+    /// Rotates the left page of the current spread clockwise.
+    pub fn rotate_left_page_cw(&mut self) {
+        let Some(spread) = self.spread.as_ref() else {
+            return;
+        };
+        let page = spread.spread().left.page;
+        if let Some(rotation) = self.rotations.get_mut(page) {
+            *rotation = rotation.clockwise();
+            self.changed_pages.push(page);
+        }
+    }
+
+    /// Rotates the right page of the current spread counter-clockwise.
+    ///
+    /// Only applies when there is a separate right page (two-page portrait spread).
+    pub fn rotate_right_page_ccw(&mut self) {
+        let Some(spread) = self.spread.as_ref() else {
+            return;
+        };
+        let Some(right) = spread.spread().right else {
+            return;
+        };
+        // Only rotate right page if it's a different page from left
+        if right.page == spread.spread().left.page {
+            return;
+        }
+        if let Some(rotation) = self.rotations.get_mut(right.page) {
+            *rotation = rotation.counter_clockwise();
+            self.changed_pages.push(right.page);
+        }
+    }
+
+    /// Rotates the right page of the current spread clockwise.
+    ///
+    /// Only applies when there is a separate right page (two-page portrait spread).
+    pub fn rotate_right_page_cw(&mut self) {
+        let Some(spread) = self.spread.as_ref() else {
+            return;
+        };
+        let Some(right) = spread.spread().right else {
+            return;
+        };
+        // Only rotate right page if it's a different page from left
+        if right.page == spread.spread().left.page {
+            return;
+        }
+        if let Some(rotation) = self.rotations.get_mut(right.page) {
+            *rotation = rotation.clockwise();
+            self.changed_pages.push(right.page);
         }
     }
 
@@ -411,6 +523,21 @@ impl App {
     /// Toggle the desired fullscreen state.
     pub fn toggle_fullscreen(&mut self) {
         self.fullscreen = !self.fullscreen;
+    }
+
+    /// The current reading direction.
+    pub fn direction(&self) -> Direction {
+        self.direction
+    }
+
+    /// Set the reading direction.
+    pub fn set_direction(&mut self, direction: Direction) {
+        self.direction = direction;
+    }
+
+    /// Toggle between LTR and RTL reading direction.
+    pub fn toggle_direction(&mut self) {
+        self.direction = self.direction.toggled();
     }
 
     /// The desired window title.
@@ -592,7 +719,9 @@ mod tests {
 
     fn app_with_pages(pages: Vec<PageOrientation>) -> App {
         let mut app = App::new();
+        let count = pages.len();
         app.orientations = pages.clone();
+        app.rotations = vec![Rotation::North; count];
         app.spread = Some(SpreadState::new(pages, ViewMode::TwoPage).expect("pages"));
         app
     }
@@ -679,6 +808,7 @@ mod tests {
         };
         let mut app = App::new();
         app.orientations = pages.clone();
+        app.rotations = vec![Rotation::North; 3];
         app.spread =
             Some(SpreadState::with_spread(pages, ViewMode::TwoPage, spread).expect("spread"));
 
@@ -718,5 +848,50 @@ mod tests {
         assert_eq!((right.width(), right.height()), (2, 2));
         assert_eq!(right.pixel(0, 0), Some([4, 5, 6]));
         assert_eq!(right.pixel(1, 1), Some([16, 17, 18]));
+    }
+
+    #[test]
+    fn rotation_state_cycles_correctly() {
+        let mut app = app_with_pages(vec![PageOrientation::Portrait; 2]);
+
+        // Initial state
+        assert_eq!(app.page_rotation(0), Rotation::North);
+
+        // Rotate left page clockwise
+        app.rotate_left_page_cw();
+        assert_eq!(app.page_rotation(0), Rotation::East);
+
+        // Rotate again
+        app.rotate_left_page_cw();
+        assert_eq!(app.page_rotation(0), Rotation::South);
+
+        // Rotate counter-clockwise
+        app.rotate_left_page_ccw();
+        assert_eq!(app.page_rotation(0), Rotation::East);
+    }
+
+    #[test]
+    fn oriented_size_swaps_dimensions_for_east_west() {
+        // Test the Rotation::swaps_dimensions logic
+        assert!(!Rotation::North.swaps_dimensions());
+        assert!(Rotation::East.swaps_dimensions());
+        assert!(!Rotation::South.swaps_dimensions());
+        assert!(Rotation::West.swaps_dimensions());
+    }
+
+    #[test]
+    fn right_page_rotation_only_works_for_separate_pages() {
+        let mut app = app_with_pages(vec![PageOrientation::Portrait; 4]);
+
+        // In a two-page portrait spread, right page should be rotatable
+        let spread = app.current_spread().expect("spread");
+        assert!(spread.right.is_some());
+        let right_page = spread.right.unwrap().page;
+
+        app.rotate_right_page_cw();
+        assert_eq!(app.page_rotation(right_page), Rotation::East);
+
+        // Left page should still be North
+        assert_eq!(app.page_rotation(spread.left.page), Rotation::North);
     }
 }
