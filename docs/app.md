@@ -127,7 +127,7 @@ changing either side.
 |---|---|---|
 | Arrow keys scroll 10 px | Arrows turn pages and step pages; pan is drag-only | M4 has no scrollbar or key-scroll path |
 | Scrollbar thickness reserved when content overflows | `scrollbar = 0`; content pans with no reserved thickness | No scrollbars are drawn yet |
-| Separate left and right page labels | One combined `n - m of N` label | Label layout is M5 |
+
 | Alt+Enter, Alt+O, Alt+X, F1 | F11 only | M4 scope |
 | Wheel scroll, Ctrl+wheel zoom, context menu | Not implemented | Later milestones |
 

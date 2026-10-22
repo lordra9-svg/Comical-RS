@@ -230,13 +230,64 @@ fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
         painter.rect_filled(thumb, 0.0, Color32::from_gray(96));
     }
 
-    painter.text(
-        Pos2::new(canvas_rect.center().x, canvas_rect.bottom() - 18.0),
-        Align2::CENTER_CENTER,
-        page_label(app, &spread, direction),
-        FontId::proportional(13.0),
-        Color32::from_gray(160),
-    );
+    // Draw page labels: separate labels for two distinct pages, one centered
+    // label for single-page or split-landscape mode. Labels are positioned
+    // inside the content area to avoid overlapping scrollbar indicators.
+    let label_y = if overflow_y {
+        // Keep labels above the horizontal scrollbar track.
+        canvas_rect.bottom() - sb_thickness - 18.0
+    } else {
+        canvas_rect.bottom() - 18.0
+    };
+    let total = app.page_count();
+    let is_two_distinct_pages = spread.right.is_some_and(|right| right.page != spread.left.page);
+
+    if is_two_distinct_pages {
+        // Two distinct pages: draw separate labels near the bottom of each page area.
+        // In screen order, refs[0] is the left page and refs[1] is the right page.
+        let left_page_num = refs[0].page + 1;
+        let right_page_num = refs[1].page + 1;
+
+        // Left label: bottom-left of the left page area, inset from edges.
+        let left_label_x = if overflow_x {
+            // Stay inside the content area, away from the vertical scrollbar.
+            content_left + pan.0 + 12.0
+        } else {
+            content_left + pan.0 + 12.0
+        };
+        painter.text(
+            Pos2::new(left_label_x, label_y),
+            Align2::LEFT_BOTTOM,
+            format!("{left_page_num} of {total}"),
+            FontId::proportional(13.0),
+            Color32::from_gray(160),
+        );
+
+        // Right label: bottom-right of the right page area, inset from edges.
+        let right_label_x = if overflow_x {
+            // Stay inside the content area, away from the vertical scrollbar.
+            content_right + pan.0 - 12.0
+        } else {
+            content_right + pan.0 - 12.0
+        };
+        painter.text(
+            Pos2::new(right_label_x, label_y),
+            Align2::RIGHT_BOTTOM,
+            format!("{right_page_num} of {total}"),
+            FontId::proportional(13.0),
+            Color32::from_gray(160),
+        );
+    } else {
+        // Single page or split landscape: one centered label at the bottom.
+        let page_num = spread.left.page + 1;
+        painter.text(
+            Pos2::new(canvas_rect.center().x, label_y),
+            Align2::CENTER_BOTTOM,
+            format!("{page_num} of {total}"),
+            FontId::proportional(13.0),
+            Color32::from_gray(160),
+        );
+    }
 
     if let Some(error) = app.error() {
         painter.text(
@@ -312,22 +363,6 @@ fn paint_placeholder(painter: &eframe::egui::Painter, rect: Rect, message: &str)
         return;
     }
     painter.galley(inner.center() - size / 2.0, galley, Color32::LIGHT_RED);
-}
-
-fn page_label(app: &App, spread: &Spread, direction: Direction) -> String {
-    let total = app.page_count();
-    match spread.right {
-        Some(right) if right.page != spread.left.page => {
-            let left_num = spread.left.page + 1;
-            let right_num = right.page + 1;
-            if direction.is_rtl() {
-                format!("{right_num} - {left_num} of {total}")
-            } else {
-                format!("{left_num} - {right_num} of {total}")
-            }
-        }
-        _ => format!("{} of {}", spread.left.page + 1, total),
-    }
 }
 
 fn uv_full() -> Rect {
@@ -467,5 +502,70 @@ mod tests {
         assert_eq!(effective_part(PagePart::Left, Direction::Rtl), PagePart::Right);
         assert_eq!(effective_part(PagePart::Right, Direction::Rtl), PagePart::Left);
         assert_eq!(effective_part(PagePart::Full, Direction::Rtl), PagePart::Full);
+    }
+
+    /// Determines whether a spread should show two separate labels or one centered label.
+    /// Returns true if the spread has two distinct pages (different page indices).
+    fn is_two_distinct_pages(spread: &Spread) -> bool {
+        spread.right.is_some_and(|right| right.page != spread.left.page)
+    }
+
+    #[test]
+    fn two_distinct_pages_shows_separate_labels() {
+        use comical_core::{PageRef, Spread};
+        let spread = Spread {
+            left: PageRef { page: 0, part: PagePart::Full },
+            right: Some(PageRef { page: 1, part: PagePart::Full }),
+        };
+        assert!(is_two_distinct_pages(&spread));
+    }
+
+    #[test]
+    fn single_page_shows_centered_label() {
+        use comical_core::{PageRef, Spread};
+        let spread = Spread {
+            left: PageRef { page: 3, part: PagePart::Full },
+            right: None,
+        };
+        assert!(!is_two_distinct_pages(&spread));
+    }
+
+    #[test]
+    fn split_landscape_shows_centered_label() {
+        use comical_core::{PageRef, Spread};
+        // Split landscape: same page index, different parts
+        let spread = Spread {
+            left: PageRef { page: 2, part: PagePart::Left },
+            right: Some(PageRef { page: 2, part: PagePart::Right }),
+        };
+        assert!(!is_two_distinct_pages(&spread));
+    }
+
+    #[test]
+    fn visible_refs_screen_order_determines_label_positions_ltr() {
+        use comical_core::{PageRef, Spread};
+        // In LTR, book-order left (page 0) is on screen left, book-order right (page 1) is on screen right.
+        // So screen-left label shows page 0, screen-right label shows page 1.
+        let spread = Spread {
+            left: PageRef { page: 0, part: PagePart::Full },
+            right: Some(PageRef { page: 1, part: PagePart::Full }),
+        };
+        let refs = visible_refs(&spread, Direction::Ltr);
+        assert_eq!(refs[0].page, 0); // screen left
+        assert_eq!(refs[1].page, 1); // screen right
+    }
+
+    #[test]
+    fn visible_refs_screen_order_determines_label_positions_rtl() {
+        use comical_core::{PageRef, Spread};
+        // In RTL, book-order left (page 0) is on screen RIGHT, book-order right (page 1) is on screen LEFT.
+        // So screen-left label shows page 1, screen-right label shows page 0.
+        let spread = Spread {
+            left: PageRef { page: 0, part: PagePart::Full },
+            right: Some(PageRef { page: 1, part: PagePart::Full }),
+        };
+        let refs = visible_refs(&spread, Direction::Rtl);
+        assert_eq!(refs[0].page, 1); // screen left (book-order right)
+        assert_eq!(refs[1].page, 0); // screen right (book-order left)
     }
 }
