@@ -44,7 +44,7 @@ fn draw_welcome(ui: &mut eframe::egui::Ui, app: &mut App) {
         ui.add_space(12.0);
         ui.label(
             eframe::egui::RichText::new(
-                "Arrows scroll, PgUp/PgDn turn pages, 1/2 change view, F11 fullscreen",
+                "Arrows turn pages (Shift+arrows scroll), PgUp/PgDn turn spreads, D toggles LTR/RTL, 1/2 change view, F11 fullscreen",
             )
             .small()
             .color(Color32::GRAY),
@@ -109,7 +109,7 @@ fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
         targets.push(target);
 
         let fetch_part = effective_part(page_ref.part, direction);
-        match app.texture(ctx, page_ref.page, fetch_part, target) {
+        match app.texture(ctx, page_ref.page, fetch_part) {
             Ok(handle) => {
                 handles.push(Some(handle));
                 errors.push(None);

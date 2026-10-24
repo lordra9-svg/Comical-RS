@@ -22,6 +22,9 @@ pub enum ToolbarAction {
     Last,
     RotateRightCcw,
     RotateRightCw,
+    ToggleDirection,
+    Open,
+    Settings,
 }
 
 /// Draw the toolbar if it is visible and not in fullscreen mode.
@@ -77,6 +80,22 @@ pub fn draw(ctx: &Context, app: &App) -> Option<ToolbarAction> {
                 if toolbar_button(ui, "↻R", "Rotate right page clockwise", enabled) {
                     action = Some(ToolbarAction::RotateRightCw);
                 }
+
+                ui.separator();
+
+                let dir_label = if app.direction().is_rtl() { "RTL" } else { "LTR" };
+                if toolbar_button(ui, dir_label, "Toggle reading direction (LTR/RTL)", enabled) {
+                    action = Some(ToolbarAction::ToggleDirection);
+                }
+
+                ui.separator();
+
+                if toolbar_button(ui, "📂", "Open Comic", true) {
+                    action = Some(ToolbarAction::Open);
+                }
+                if toolbar_button(ui, "⚙", "Settings", true) {
+                    action = Some(ToolbarAction::Settings);
+                }
             });
         });
 
@@ -102,6 +121,9 @@ pub fn apply(app: &mut App, action: ToolbarAction) {
         ToolbarAction::Last => app.last(),
         ToolbarAction::RotateRightCcw => app.rotate_right_page_ccw(),
         ToolbarAction::RotateRightCw => app.rotate_right_page_cw(),
+        ToolbarAction::ToggleDirection => app.toggle_direction(),
+        ToolbarAction::Open => app.open_file_dialog(),
+        ToolbarAction::Settings => app.toggle_settings(),
     }
 }
 

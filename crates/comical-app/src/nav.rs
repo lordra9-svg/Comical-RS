@@ -52,7 +52,7 @@ struct Wheel {
 ///
 /// Returns `true` if the input was consumed (the app handled it).
 pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
-    let (pressed, wheel) = ctx.input(|input| {
+    let (pressed, wheel, shift) = ctx.input(|input| {
         let shift = input.modifiers.shift;
         let ctrl = input.modifiers.ctrl;
         let pressed = Pressed {
@@ -109,6 +109,7 @@ pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
                 scroll_y,
                 zoom_delta,
             },
+            shift,
         )
     });
 
@@ -135,18 +136,38 @@ pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
         consumed = true;
     }
 
-    // Arrow keys scroll the viewport.
+    // Arrow keys turn pages; Shift+arrow scrolls the viewport.
     if !consumed && pressed.scroll_up {
-        app.scroll((0.0, ARROW_SCROLL_STEP));
+        if shift {
+            app.scroll((0.0, ARROW_SCROLL_STEP));
+        } else {
+            app.prev_page();
+        }
         consumed = true;
     } else if !consumed && pressed.scroll_down {
-        app.scroll((0.0, -ARROW_SCROLL_STEP));
+        if shift {
+            app.scroll((0.0, -ARROW_SCROLL_STEP));
+        } else {
+            app.next_page();
+        }
         consumed = true;
     } else if !consumed && pressed.scroll_left {
-        app.scroll((ARROW_SCROLL_STEP, 0.0));
+        if shift {
+            app.scroll((ARROW_SCROLL_STEP, 0.0));
+        } else if app.direction().is_rtl() {
+            app.next_page();
+        } else {
+            app.prev_page();
+        }
         consumed = true;
     } else if !consumed && pressed.scroll_right {
-        app.scroll((-ARROW_SCROLL_STEP, 0.0));
+        if shift {
+            app.scroll((-ARROW_SCROLL_STEP, 0.0));
+        } else if app.direction().is_rtl() {
+            app.prev_page();
+        } else {
+            app.next_page();
+        }
         consumed = true;
     }
 

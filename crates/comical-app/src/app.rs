@@ -6,13 +6,18 @@
 
 use std::num::NonZeroUsize;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 use comical_archive::{ComicArchive, DEFAULT_MAX_ENTRY_BYTES};
 use comical_core::{
     Direction, MAX_CUSTOM_PERCENT, MIN_CUSTOM_PERCENT, PageEntry, PageOrientation, PagePart,
     PageRef, Rotation, Size, Spread, SpreadState, ViewMode, ZoomMode, ZoomOptions,
 };
-use comical_image::{Filter, RgbImage, decode, resize, rotate as image_rotate};
+use comical_image::{Filter, RgbImage, decode, probe_size, resize, rotate as image_rotate};
+use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use eframe::egui::{ColorImage, Context, TextureHandle, TextureOptions};
 use lru::LruCache;
 
@@ -22,42 +27,139 @@ use crate::settings::Settings;
 /// Number of decoded pages and uploaded textures kept in memory.
 const CACHE_PAGES: usize = 10;
 
+/// Longest side of an uploaded page texture, in pixels.
+///
+/// Keeping textures independent of the on-screen size makes window resizing
+/// free: the GPU scales the cached texture instead of asking us to decode and
+/// resample the page again for every new window size. Most comic pages are
+/// below this limit and are uploaded at their natural size.
+const TEXTURE_MAX_SIDE: u32 = 4096;
+
 /// Resampling filter used when a page has to be scaled.
 const RESAMPLE_FILTER: Filter = Filter::CatmullRom;
 
+/// Number of thumbnail requests that may wait for the thumbnail worker.
+const THUMB_QUEUE: usize = 32;
+
 /// Identity of one uploaded texture.
 ///
-/// Width and height are the physical target dimensions, so a zoom change
-/// produces a new key and a fresh upload.
+/// The size is deliberately absent. A texture is decoded at its natural (or
+/// capped) size once, and the GPU scales it for whatever size the current
+/// window and zoom need.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct TextureKey {
     page: usize,
     part: PagePart,
-    width: u32,
-    height: u32,
     rotation: Rotation,
+}
+
+/// Work sent to the background decode thread.
+#[derive(Debug, Clone)]
+struct DecodeRequest {
+    key: TextureKey,
+    generation: u64,
+}
+
+/// Completed work returned from the background decode thread.
+struct DecodeResult {
+    key: TextureKey,
+    generation: u64,
+    image: ColorImage,
+    name: String,
+}
+
+/// Work sent to the background thumbnail thread.
+#[derive(Debug, Clone, Copy)]
+struct ThumbRequest {
+    page: usize,
+}
+
+/// Completed thumbnail, or `None` when the page could not be decoded.
+struct ThumbResult {
+    page: usize,
+    image: Option<ColorImage>,
+    name: String,
 }
 
 /// A currently open book and its per-book caches.
 struct OpenedBook {
     /// Page entries in book order.
     pages: Vec<PageEntry>,
-    /// The archive handle (keeps it alive).
-    archive: Box<dyn ComicArchive>,
+    /// The archive handle (keeps it alive). Wrapped in Mutex because
+    /// `read_page` requires `&mut self` but we share it with the decode worker.
+    archive: Arc<Mutex<Box<dyn ComicArchive + Send>>>,
     /// Natural full-page size, filled on the first successful decode.
     page_sizes: Vec<Option<Size>>,
     /// Per-page error message, so a broken page is not retried every frame.
     page_errors: Vec<Option<String>>,
     /// Decoded pages at natural size, keyed by page index.
     natural: LruCache<usize, RgbImage>,
-    /// Uploaded, already resized textures, keyed by page, part and target size.
+    /// Uploaded page textures, keyed by page, part and rotation.
     textures: LruCache<TextureKey, TextureHandle>,
+    /// Sends decode requests to the background worker.
+    decode_tx: Sender<DecodeRequest>,
+    /// Receives completed decodes from the background worker.
+    decode_rx: Receiver<DecodeResult>,
+    /// Keys currently being decoded, to avoid duplicate requests.
+    pending: std::collections::HashSet<TextureKey>,
+    /// Generation used to discard decode requests made obsolete by navigation.
+    generation: Arc<AtomicU64>,
+    /// One-pixel black texture stretched under a page that is still decoding.
+    placeholder: Option<TextureHandle>,
+    /// Uploaded thumbnails for the browser panel.
+    thumb_cache: crate::browser::ThumbnailCache,
+    /// Pages whose thumbnail is being decoded.
+    thumb_pending: std::collections::HashSet<usize>,
+    /// Sends thumbnail requests to the background thumbnail worker.
+    thumb_tx: Sender<ThumbRequest>,
+    /// Receives completed thumbnails from the background worker.
+    thumb_rx: Receiver<ThumbResult>,
 }
 
 impl OpenedBook {
-    fn new(archive: Box<dyn ComicArchive>) -> Self {
+    fn new(archive: Box<dyn ComicArchive + Send>) -> Self {
         let pages = archive.pages().to_vec();
         let count = pages.len();
+        let (decode_tx, worker_rx) = unbounded::<DecodeRequest>();
+        let (worker_tx, decode_rx) = unbounded::<DecodeResult>();
+        let generation = Arc::new(AtomicU64::new(0));
+        let archive = Arc::new(Mutex::new(archive));
+
+        let worker_archive = Arc::clone(&archive);
+        let worker_generation = Arc::clone(&generation);
+        thread::Builder::new()
+            .name("comical-decode".to_owned())
+            .spawn(move || {
+                while let Ok(req) = worker_rx.recv() {
+                    // A page turn makes older requests useless. Skipping them
+                    // here keeps the visible page from waiting behind a queue
+                    // of stale decodes.
+                    if req.generation != worker_generation.load(Ordering::Relaxed) {
+                        continue;
+                    }
+                    let result = decode_request(&worker_archive, &req);
+                    if worker_tx.send(result).is_err() {
+                        break;
+                    }
+                }
+            })
+            .expect("failed to spawn decode worker");
+
+        let (thumb_tx, thumb_worker_rx) = bounded::<ThumbRequest>(THUMB_QUEUE);
+        let (thumb_worker_tx, thumb_rx) = unbounded::<ThumbResult>();
+        let thumb_archive = Arc::clone(&archive);
+        thread::Builder::new()
+            .name("comical-thumb".to_owned())
+            .spawn(move || {
+                while let Ok(req) = thumb_worker_rx.recv() {
+                    let result = decode_thumbnail(&thumb_archive, req.page);
+                    if thumb_worker_tx.send(result).is_err() {
+                        break;
+                    }
+                }
+            })
+            .expect("failed to spawn thumbnail worker");
+
         Self {
             pages,
             archive,
@@ -65,23 +167,69 @@ impl OpenedBook {
             page_errors: vec![None; count],
             natural: LruCache::new(cache_capacity()),
             textures: LruCache::new(cache_capacity()),
+            decode_tx,
+            decode_rx,
+            pending: std::collections::HashSet::new(),
+            generation,
+            placeholder: None,
+            thumb_cache: crate::browser::ThumbnailCache::new(),
+            thumb_pending: std::collections::HashSet::new(),
+            thumb_tx,
+            thumb_rx,
         }
     }
 
-    /// Returns the natural full-page size, decoding the page on first use.
+    /// Discards decode work for pages that are no longer visible.
+    fn cancel_pending(&mut self) {
+        self.generation.fetch_add(1, Ordering::Relaxed);
+        self.pending.clear();
+    }
+
+    /// Returns the natural full-page size, reading only the image header.
+    ///
+    /// The full image is decoded later on the background worker. Parsing the
+    /// header is fast enough to lay out the first spread without blocking the
+    /// UI on a full-resolution decode.
     fn natural_size(&mut self, page: usize) -> Result<Size, AppError> {
         if let Some(Some(size)) = self.page_sizes.get(page) {
             return Ok(*size);
         }
 
-        let size = {
-            let image = self.natural(page)?;
-            Size::new(image.width(), image.height())
+        let bytes = self.read_page_bytes(page)?;
+        let (width, height) = match probe_size(&bytes) {
+            Ok(size) => size,
+            Err(error) => {
+                let message = error.to_string();
+                self.record_page_error(page, message.clone());
+                return Err(AppError::Page { page, message });
+            }
         };
+        let size = Size::new(width, height);
         if let Some(slot) = self.page_sizes.get_mut(page) {
             *slot = Some(size);
         }
         Ok(size)
+    }
+
+    /// Reads one page's encoded bytes, recording a per-page error on failure.
+    fn read_page_bytes(&mut self, page: usize) -> Result<Vec<u8>, AppError> {
+        if let Some(Some(message)) = self.page_errors.get(page) {
+            return Err(AppError::Page {
+                page,
+                message: message.clone(),
+            });
+        }
+
+        let mut guard = self.archive.lock().unwrap();
+        match guard.read_page(page, DEFAULT_MAX_ENTRY_BYTES) {
+            Ok(bytes) => Ok(bytes),
+            Err(error) => {
+                let message = error.to_string();
+                drop(guard);
+                self.record_page_error(page, message.clone());
+                Err(AppError::Page { page, message })
+            }
+        }
     }
 
     /// Returns the oriented size after applying rotation.
@@ -102,22 +250,8 @@ impl OpenedBook {
                 .get(&page)
                 .expect("page was found in the natural cache"));
         }
-        if let Some(Some(message)) = self.page_errors.get(page) {
-            return Err(AppError::Page {
-                page,
-                message: message.clone(),
-            });
-        }
 
-        let bytes = match self.archive.read_page(page, DEFAULT_MAX_ENTRY_BYTES) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                let message = error.to_string();
-                self.record_page_error(page, message.clone());
-                return Err(AppError::Page { page, message });
-            }
-        };
-
+        let bytes = self.read_page_bytes(page)?;
         let image = match decode(&bytes) {
             Ok(image) => image,
             Err(error) => {
@@ -142,61 +276,224 @@ impl OpenedBook {
 
     /// Returns an uploaded texture for one visible part of a page.
     ///
-    /// A cache hit performs no archive read, no decode and no resample, which
-    /// keeps panning cheap.
+    /// Cache hits are instant. Misses queue a background decode and return a
+    /// one-pixel placeholder, stretched to the page rectangle, so the UI
+    /// thread never blocks on I/O, decode or resampling.
     fn texture(
         &mut self,
         ctx: &Context,
         page: usize,
         part: PagePart,
-        target: Size,
         rotation: Rotation,
     ) -> Result<TextureHandle, AppError> {
         let key = TextureKey {
             page,
             part,
-            width: target.width,
-            height: target.height,
             rotation,
         };
         if let Some(handle) = self.textures.get(&key) {
             return Ok(handle.clone());
         }
+        if let Some(Some(message)) = self.page_errors.get(page) {
+            return Err(AppError::Page {
+                page,
+                message: message.clone(),
+            });
+        }
 
-        let image = {
-            let natural = self.natural(page)?;
-            // Apply rotation before cropping/resizing
-            let rotated = if rotation != Rotation::North {
-                image_rotate(natural, rotation_to_image(rotation))
-            } else {
-                natural.clone()
+        if !self.pending.contains(&key) {
+            let request = DecodeRequest {
+                key,
+                generation: self.generation.load(Ordering::Relaxed),
             };
+            if self.decode_tx.send(request).is_ok() {
+                self.pending.insert(key);
+            }
+        }
 
-            if part == PagePart::Full {
-                if rotated.width() == target.width && rotated.height() == target.height {
-                    rotated
-                } else {
-                    resize(&rotated, target.width, target.height, RESAMPLE_FILTER)?
+        Ok(self.placeholder_texture(ctx))
+    }
+
+    /// Returns a cached thumbnail, queueing a background decode on a miss.
+    fn thumbnail(&mut self, page: usize) -> Option<TextureHandle> {
+        if let Some(handle) = self.thumb_cache.get(page) {
+            return Some(handle);
+        }
+
+        if !self.thumb_pending.contains(&page) {
+            match self.thumb_tx.try_send(ThumbRequest { page }) {
+                Ok(()) => {
+                    self.thumb_pending.insert(page);
                 }
-            } else {
-                let cropped = crop_part(&rotated, part)?;
-                if cropped.width() == target.width && cropped.height() == target.height {
-                    cropped
-                } else {
-                    resize(&cropped, target.width, target.height, RESAMPLE_FILTER)?
+                Err(_) => {
+                    // The queue is full. The next frame will try again once a
+                    // slot frees up.
                 }
             }
-        };
+        }
+        None
+    }
 
-        let size = [image.width() as usize, image.height() as usize];
-        let color = ColorImage::from_rgb(size, image.pixels());
-        let name = format!(
-            "page-{page}-{part:?}-{}x{}-{:?}",
-            target.width, target.height, rotation
-        );
-        let handle = ctx.load_texture(name, color, TextureOptions::LINEAR);
-        self.textures.put(key, handle.clone());
-        Ok(handle)
+    /// Whether any background decode or thumbnail is still outstanding.
+    fn has_pending(&self) -> bool {
+        !self.pending.is_empty() || !self.thumb_pending.is_empty()
+    }
+
+    /// Returns the one-pixel black placeholder used while a page decodes.
+    fn placeholder_texture(&mut self, ctx: &Context) -> TextureHandle {
+        if let Some(handle) = &self.placeholder {
+            return handle.clone();
+        }
+        let image = ColorImage::from_rgb([1, 1], &[0, 0, 0]);
+        let handle = ctx.load_texture("placeholder-black", image, TextureOptions::LINEAR);
+        self.placeholder = Some(handle.clone());
+        handle
+    }
+
+    /// Drain completed background decodes and upload them as GPU textures.
+    fn drain_decoded(&mut self, ctx: &Context) -> bool {
+        let mut uploaded = false;
+        while let Ok(result) = self.decode_rx.try_recv() {
+            self.pending.remove(&result.key);
+            if result.generation != self.generation.load(Ordering::Relaxed) {
+                // A page turn made this result obsolete. Uploading it would
+                // stall the frame for a page the reader has already left.
+                continue;
+            }
+            let handle = ctx.load_texture(result.name, result.image, TextureOptions::LINEAR);
+            self.textures.put(result.key, handle);
+            uploaded = true;
+        }
+        while let Ok(result) = self.thumb_rx.try_recv() {
+            self.thumb_pending.remove(&result.page);
+            let image = result.image.unwrap_or_else(|| {
+                // A failed thumbnail still needs a cache entry, otherwise the
+                // browser would request the same broken page every frame.
+                ColorImage::from_rgb([1, 1], &[24, 24, 24])
+            });
+            let handle = ctx.load_texture(result.name, image, TextureOptions::LINEAR);
+            self.thumb_cache.put(result.page, handle);
+            uploaded = true;
+        }
+        uploaded
+    }
+}
+
+/// Background worker function: reads archive, decodes, rotates and crops.
+///
+/// The result is capped at [`TEXTURE_MAX_SIDE`] but never scaled to the current
+/// window size, so window resizes reuse the same texture.
+fn decode_request(
+    archive: &Arc<Mutex<Box<dyn ComicArchive + Send>>>,
+    req: &DecodeRequest,
+) -> DecodeResult {
+    let name = format!(
+        "page-{}-{:?}-{:?}",
+        req.key.page, req.key.part, req.key.rotation
+    );
+
+    let bytes = match archive
+        .lock()
+        .unwrap()
+        .read_page(req.key.page, DEFAULT_MAX_ENTRY_BYTES)
+    {
+        Ok(bytes) => bytes,
+        Err(_) => return placeholder_result(req, name),
+    };
+
+    let decoded = match decode(&bytes) {
+        Ok(image) => image,
+        Err(_) => return placeholder_result(req, name),
+    };
+
+    let rotated = if req.key.rotation != Rotation::North {
+        image_rotate(&decoded, rotation_to_image(req.key.rotation))
+    } else {
+        decoded
+    };
+
+    let image = if req.key.part == PagePart::Full {
+        rotated
+    } else {
+        crop_part(&rotated, req.key.part).unwrap_or(rotated)
+    };
+
+    let (width, height) = capped_dimensions(image.width(), image.height());
+    let image = if width == image.width() && height == image.height() {
+        image
+    } else {
+        resize(&image, width, height, RESAMPLE_FILTER).unwrap_or(image)
+    };
+
+    let size = [image.width() as usize, image.height() as usize];
+    DecodeResult {
+        key: req.key,
+        generation: req.generation,
+        image: ColorImage::from_rgb(size, image.pixels()),
+        name,
+    }
+}
+
+fn placeholder_result(req: &DecodeRequest, name: String) -> DecodeResult {
+    DecodeResult {
+        key: req.key,
+        generation: req.generation,
+        image: ColorImage::from_rgb([1, 1], &[0, 0, 0]),
+        name,
+    }
+}
+
+/// Scales a dimension down only when it exceeds [`TEXTURE_MAX_SIDE`].
+fn capped_dimensions(width: u32, height: u32) -> (u32, u32) {
+    let longest = width.max(height);
+    if longest <= TEXTURE_MAX_SIDE {
+        return (width, height);
+    }
+    let scale = f64::from(TEXTURE_MAX_SIDE) / f64::from(longest);
+    (
+        ((f64::from(width) * scale).round() as u32).max(1),
+        ((f64::from(height) * scale).round() as u32).max(1),
+    )
+}
+
+/// Background worker function: reads one page and builds an 80 px thumbnail.
+fn decode_thumbnail(
+    archive: &Arc<Mutex<Box<dyn ComicArchive + Send>>>,
+    page: usize,
+) -> ThumbResult {
+    let name = format!("thumb-{page}");
+    let bytes = match archive
+        .lock()
+        .unwrap()
+        .read_page(page, DEFAULT_MAX_ENTRY_BYTES)
+    {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return ThumbResult {
+                page,
+                image: None,
+                name,
+            };
+        }
+    };
+    let decoded = match decode(&bytes) {
+        Ok(image) => image,
+        Err(_) => {
+            return ThumbResult {
+                page,
+                image: None,
+                name,
+            };
+        }
+    };
+
+    let (width, height) = crate::browser::thumbnail_dimensions(decoded.width(), decoded.height());
+    let thumb = resize(&decoded, width, height, Filter::Box).unwrap_or(decoded);
+    let size = [thumb.width() as usize, thumb.height() as usize];
+    ThumbResult {
+        page,
+        image: Some(ColorImage::from_rgb(size, thumb.pixels())),
+        name,
     }
 }
 
@@ -220,8 +517,6 @@ pub struct App {
     orientations: Vec<PageOrientation>,
     /// Per-page rotation state.
     rotations: Vec<Rotation>,
-    /// Thumbnail cache for the browser panel.
-    thumb_cache: crate::browser::ThumbnailCache,
     /// Pages whose orientation changed since the last spread rebuild.
     changed_pages: Vec<usize>,
     /// Zoom and fit settings; `mode` always mirrors the spread state.
@@ -243,20 +538,24 @@ pub struct App {
     title: String,
     /// Set when the title must be sent to the viewport.
     title_dirty: bool,
+    /// Whether the settings window is currently open.
+    settings_open: bool,
 }
 
 impl App {
     /// Creates an empty application, loading persisted settings from disk.
     pub fn new() -> Self {
         let settings = Settings::load();
+        let mut zoom = ZoomOptions::new(settings.mode, settings.zoom);
+        zoom.custom_percent = settings.zoom_percent;
+        zoom.fit_only_if_oversized = settings.fit_only_oversize;
         Self {
             book: None,
             spread: None,
             orientations: Vec::new(),
             rotations: Vec::new(),
-            thumb_cache: crate::browser::ThumbnailCache::new(),
             changed_pages: Vec::new(),
-            zoom: ZoomOptions::new(settings.mode, settings.zoom),
+            zoom,
             scrollbar_points: 16.0,
             pan: (0.0, 0.0),
             fullscreen: false,
@@ -265,6 +564,7 @@ impl App {
             error: None,
             title: "comical".to_owned(),
             title_dirty: true,
+            settings_open: false,
         }
     }
 
@@ -278,6 +578,7 @@ impl App {
         self.settings.zoom = self.zoom.zoom;
         self.settings.zoom_percent = self.zoom.custom_percent;
         self.settings.mode = self.zoom.mode;
+        self.settings.fit_only_oversize = self.zoom.fit_only_if_oversized;
         self.settings.direction = self.direction;
     }
 
@@ -297,7 +598,6 @@ impl App {
         self.orientations = orientations;
         self.rotations = rotations;
         self.changed_pages.clear();
-        self.thumb_cache.clear();
         self.spread = Some(spread);
         self.pan = (0.0, 0.0);
         self.error = None;
@@ -364,23 +664,31 @@ impl App {
         book.natural(page)
     }
 
+    /// Discards background decode work for pages that are no longer visible.
+    fn invalidate_visible(&mut self) {
+        if let Some(book) = self.book.as_mut() {
+            book.cancel_pending();
+        }
+    }
+
     /// Jumps to a specific page index.
     pub fn go_to_page(&mut self, page: usize) {
         if let Some(spread) = self.spread.as_mut() {
             spread.go_to_page(page);
         }
         self.pan = (0.0, 0.0);
+        self.invalidate_visible();
     }
 
-    /// Returns a mutable reference to the thumbnail cache.
-    pub fn thumb_cache_mut(&mut self) -> &mut crate::browser::ThumbnailCache {
-        &mut self.thumb_cache
+    /// Returns a cached thumbnail, queueing a background decode on a miss.
+    pub fn thumbnail(&mut self, page: usize) -> Option<TextureHandle> {
+        self.book.as_mut()?.thumbnail(page)
     }
 
     /// The oriented full-page size, after rotation.
     ///
-    /// The first call for a page decodes it. Learning its orientation may mark
-    /// the spread for a rebuild on the next frame.
+    /// The first call reads only the image header. Learning the orientation may
+    /// mark the spread for a rebuild on the next frame.
     pub fn page_size(&mut self, page: usize) -> Result<Size, AppError> {
         let rotation = self.rotations.get(page).copied().unwrap_or_default();
         let oriented = {
@@ -396,17 +704,16 @@ impl App {
         self.rotations.get(page).copied().unwrap_or_default()
     }
 
-    /// Returns a cached, uploaded texture for the requested target size.
+    /// Returns a cached texture for one visible page part.
     pub fn texture(
         &mut self,
         ctx: &Context,
         page: usize,
         part: PagePart,
-        target: Size,
     ) -> Result<TextureHandle, AppError> {
         let rotation = self.rotations.get(page).copied().unwrap_or_default();
         let book = self.book.as_mut().ok_or(AppError::NoBook)?;
-        book.texture(ctx, page, part, target, rotation)
+        book.texture(ctx, page, part, rotation)
     }
 
     fn learn_orientation(&mut self, page: usize, size: Size) {
@@ -433,6 +740,7 @@ impl App {
             *rotation = rotation.counter_clockwise();
             self.changed_pages.push(page);
         }
+        self.invalidate_visible();
     }
 
     /// Rotates the left page of the current spread clockwise.
@@ -445,6 +753,7 @@ impl App {
             *rotation = rotation.clockwise();
             self.changed_pages.push(page);
         }
+        self.invalidate_visible();
     }
 
     /// Rotates the right page of the current spread counter-clockwise.
@@ -465,6 +774,7 @@ impl App {
             *rotation = rotation.counter_clockwise();
             self.changed_pages.push(right.page);
         }
+        self.invalidate_visible();
     }
 
     /// Rotates the right page of the current spread clockwise.
@@ -485,6 +795,7 @@ impl App {
             *rotation = rotation.clockwise();
             self.changed_pages.push(right.page);
         }
+        self.invalidate_visible();
     }
 
     /// Rebuilds the spread if a newly decoded page changed its orientation.
@@ -516,6 +827,7 @@ impl App {
             if let Ok(mut state) = SpreadState::new(self.orientations.clone(), mode) {
                 state.go_to_page(spread.left.page);
                 self.spread = Some(state);
+                self.invalidate_visible();
                 return true;
             }
             return false;
@@ -536,6 +848,7 @@ impl App {
         match SpreadState::with_spread(self.orientations.clone(), mode, updated) {
             Ok(state) => {
                 self.spread = Some(state);
+                self.invalidate_visible();
                 true
             }
             Err(_) => false,
@@ -603,10 +916,97 @@ impl App {
         self.sync_settings();
     }
 
+    /// Set whether fit modes leave a page that already fits at 1:1.
+    pub fn set_fit_only_oversize(&mut self, enabled: bool) {
+        self.zoom.fit_only_if_oversized = enabled;
+        self.sync_settings();
+    }
+
     /// Toggle toolbar visibility.
     pub fn toggle_toolbar(&mut self) {
         self.settings.toolbar_visible = !self.settings.toolbar_visible;
         self.sync_settings();
+    }
+
+    /// Toggle the settings window.
+    pub fn toggle_settings(&mut self) {
+        self.settings_open = !self.settings_open;
+    }
+
+    /// Whether the settings window is open.
+    pub fn settings_open(&self) -> bool {
+        self.settings_open
+    }
+
+    /// Draw the settings window if open.
+    pub fn draw_settings(&mut self, ctx: &Context) {
+        if !self.settings_open {
+            return;
+        }
+        let mut open = self.settings_open;
+        eframe::egui::Window::new("Settings")
+            .open(&mut open)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.heading("Reading");
+                ui.horizontal(|ui| {
+                    ui.label("Direction:");
+                    let dir_label = if self.direction().is_rtl() { "RTL" } else { "LTR" };
+                    if ui.button(dir_label).clicked() {
+                        self.toggle_direction();
+                    }
+                });
+                ui.separator();
+                ui.heading("View");
+                ui.horizontal(|ui| {
+                    ui.label("Layout:");
+                    let mut mode = self.zoom.mode;
+                    ui.radio_value(&mut mode, ViewMode::OnePage, "One page");
+                    ui.radio_value(&mut mode, ViewMode::TwoPage, "Two pages");
+                    if mode != self.zoom.mode {
+                        self.set_view_mode(mode);
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Zoom:");
+                    let zoom_label = match self.zoom.zoom {
+                        ZoomMode::Fit => "Fit",
+                        ZoomMode::Width => "Width",
+                        ZoomMode::Height => "Height",
+                        ZoomMode::Full => "Full",
+                        ZoomMode::Custom => "Custom",
+                    };
+                    if ui.button(zoom_label).clicked() {
+                        self.cycle_zoom();
+                    }
+                });
+                if self.zoom.zoom == ZoomMode::Custom {
+                    ui.horizontal(|ui| {
+                        ui.label("Percent:");
+                        if ui.button("-").clicked() {
+                            self.adjust_custom_percent(-10);
+                        }
+                        ui.label(format!("{}%", self.zoom.custom_percent));
+                        if ui.button("+").clicked() {
+                            self.adjust_custom_percent(10);
+                        }
+                    });
+                }
+                let mut fit_only = self.zoom.fit_only_if_oversized;
+                if ui
+                    .checkbox(&mut fit_only, "Only fit pages larger than the window")
+                    .changed()
+                {
+                    self.set_fit_only_oversize(fit_only);
+                }
+                ui.separator();
+                ui.heading("Interface");
+                ui.checkbox(&mut self.settings.toolbar_visible, "Toolbar (T)");
+                ui.checkbox(&mut self.settings.browser_visible, "Page browser (B)");
+            });
+        if !open {
+            self.settings_open = false;
+        }
     }
 
     /// Toggle thumbnail browser visibility.
@@ -626,6 +1026,7 @@ impl App {
             spread.next_turn();
         }
         self.pan = (0.0, 0.0);
+        self.invalidate_visible();
     }
 
     /// Moves to the previous spread.
@@ -634,6 +1035,7 @@ impl App {
             spread.prev_turn();
         }
         self.pan = (0.0, 0.0);
+        self.invalidate_visible();
     }
 
     /// Moves forward by one page.
@@ -642,6 +1044,7 @@ impl App {
             spread.next_page();
         }
         self.pan = (0.0, 0.0);
+        self.invalidate_visible();
     }
 
     /// Moves backward by one page.
@@ -650,6 +1053,7 @@ impl App {
             spread.prev_page();
         }
         self.pan = (0.0, 0.0);
+        self.invalidate_visible();
     }
 
     /// Moves to the first spread.
@@ -658,6 +1062,7 @@ impl App {
             spread.first();
         }
         self.pan = (0.0, 0.0);
+        self.invalidate_visible();
     }
 
     /// Moves to the last spread.
@@ -666,6 +1071,7 @@ impl App {
             spread.last();
         }
         self.pan = (0.0, 0.0);
+        self.invalidate_visible();
     }
 
     /// Switches between one-page and two-page layout.
@@ -675,6 +1081,7 @@ impl App {
         }
         self.zoom.mode = mode;
         self.pan = (0.0, 0.0);
+        self.invalidate_visible();
         self.sync_settings();
     }
 
@@ -719,6 +1126,20 @@ impl Default for App {
     }
 }
 
+impl App {
+    fn drain_decoded(&mut self, ctx: &Context) -> bool {
+        if let Some(book) = self.book.as_mut() {
+            book.drain_decoded(ctx)
+        } else {
+            false
+        }
+    }
+
+    fn has_pending_work(&self) -> bool {
+        self.book.as_ref().is_some_and(OpenedBook::has_pending)
+    }
+}
+
 impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         if self.title_dirty {
@@ -736,10 +1157,19 @@ impl eframe::App for App {
             crate::browser::apply(self, action);
         }
 
-        crate::view::draw(ctx, self);
+        // Upload any textures decoded in the background since last frame.
+        let decoded = self.drain_decoded(ctx);
 
-        if self.refresh_spread() || consumed {
+        crate::view::draw(ctx, self);
+        self.draw_settings(ctx);
+
+        // Background results arrive without an input event. Keep a frame
+        // scheduled while work is outstanding, otherwise a page queued during
+        // this frame would sit invisible until the user moved the mouse.
+        if decoded || self.refresh_spread() || consumed || self.settings_open {
             ctx.request_repaint();
+        } else if self.has_pending_work() {
+            ctx.request_repaint_after(Duration::from_millis(16));
         }
     }
 

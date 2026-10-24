@@ -6,8 +6,7 @@
 
 use std::num::NonZeroUsize;
 
-use comical_image::{Filter, resize};
-use eframe::egui::{self, Color32, ColorImage, Context, TextureHandle, TextureOptions};
+use eframe::egui::{self, Color32, Context, TextureHandle};
 use lru::LruCache;
 
 use crate::App;
@@ -50,9 +49,14 @@ impl ThumbnailCache {
         }
     }
 
-    /// Clears all cached thumbnails. Call when opening a new book.
-    pub fn clear(&mut self) {
-        self.textures.clear();
+    /// Returns a cached thumbnail texture, if present.
+    pub(crate) fn get(&mut self, page: usize) -> Option<TextureHandle> {
+        self.textures.get(&page).cloned()
+    }
+
+    /// Stores a thumbnail texture for a page.
+    pub(crate) fn put(&mut self, page: usize, handle: TextureHandle) {
+        self.textures.put(page, handle);
     }
 }
 
@@ -87,10 +91,10 @@ pub fn draw(ctx: &Context, app: &mut App) -> Option<BrowserAction> {
         .show(ctx, |ui| {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    for page in 0..page_count {
+                .show_rows(ui, ROW_HEIGHT, page_count, |ui, rows| {
+                    for page in rows {
                         let is_selected = current_page == Some(page);
-                        let response = draw_row(ui, ctx, app, page, is_selected);
+                        let response = draw_row(ui, app, page, is_selected);
                         if response.clicked() {
                             action = Some(BrowserAction::GoToPage(page));
                         }
@@ -103,7 +107,6 @@ pub fn draw(ctx: &Context, app: &mut App) -> Option<BrowserAction> {
 
 fn draw_row(
     ui: &mut egui::Ui,
-    ctx: &Context,
     app: &mut App,
     page: usize,
     selected: bool,
@@ -128,7 +131,7 @@ fn draw_row(
     }
 
     // Try to get or generate a thumbnail texture.
-    if let Some(handle) = get_thumbnail(ctx, app, page) {
+    if let Some(handle) = get_thumbnail(app, page) {
         let thumb_size = handle.size_vec2();
         let aspect = thumb_size.x / thumb_size.y.max(1.0);
         let max_h = ROW_HEIGHT - V_MARGIN * 2.0;
@@ -161,28 +164,13 @@ fn draw_row(
     ui.interact(row_rect, ui.next_auto_id(), egui::Sense::click())
 }
 
-fn get_thumbnail(ctx: &Context, app: &mut App, page: usize) -> Option<TextureHandle> {
-    // Check cache first.
-    if let Some(handle) = app.thumb_cache_mut().textures.get(&page) {
-        return Some(handle.clone());
-    }
-
-    // Generate thumbnail from the decoded natural-size image.
-    let image = app.decoded_page(page).ok()?;
-    let (tw, th) = thumbnail_dimensions(image.width(), image.height());
-    let thumb = resize(image, tw, th, Filter::Box).ok()?;
-
-    let size = [thumb.width() as usize, thumb.height() as usize];
-    let color = ColorImage::from_rgb(size, thumb.pixels());
-    let name = format!("thumb-{page}");
-    let handle = ctx.load_texture(name, color, TextureOptions::LINEAR);
-    app.thumb_cache_mut().textures.put(page, handle.clone());
-    Some(handle)
+fn get_thumbnail(app: &mut App, page: usize) -> Option<TextureHandle> {
+    app.thumbnail(page)
 }
 
 /// Compute thumbnail dimensions preserving aspect ratio, fitting within
 /// `THUMB_MAX_DIM`.
-fn thumbnail_dimensions(src_w: u32, src_h: u32) -> (u32, u32) {
+pub(crate) fn thumbnail_dimensions(src_w: u32, src_h: u32) -> (u32, u32) {
     if src_w == 0 || src_h == 0 {
         return (1, 1);
     }
