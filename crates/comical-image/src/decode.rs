@@ -11,13 +11,20 @@ use crate::{ImageError, RgbImage};
 /// output.
 pub const MAX_DECODED_PIXELS: u64 = 100_000_000;
 
-/// Decodes PNG, JPEG or GIF bytes to an opaque RGB image.
+/// Reads the pixel dimensions of PNG, JPEG or GIF bytes without decoding the
+/// image data.
 ///
-/// Alpha is ignored, not composited: an RGBA pixel keeps its colour channels
-/// and simply loses its alpha byte. For GIF input the first frame is decoded.
-/// Unsupported, truncated or malformed data returns an [`ImageError`] instead
-/// of panicking.
-pub fn decode(bytes: &[u8]) -> Result<RgbImage, ImageError> {
+/// The same format checks and pixel limit as [`decode`] apply, so a header
+/// accepted here can be decoded later. This is used to lay out a page before
+/// its full-resolution decode finishes.
+pub fn probe_size(bytes: &[u8]) -> Result<(u32, u32), ImageError> {
+    let (_, width, height) = format_and_dimensions(bytes)?;
+    Ok((width, height))
+}
+
+fn format_and_dimensions(
+    bytes: &[u8],
+) -> Result<(image::ImageFormat, u32, u32), ImageError> {
     if bytes.is_empty() {
         return Err(ImageError::EmptyInput);
     }
@@ -31,23 +38,29 @@ pub fn decode(bytes: &[u8]) -> Result<RgbImage, ImageError> {
         return Err(ImageError::UnsupportedFormat(format!("{format:?}")));
     }
 
-    let (header_width, header_height) = image::ImageReader::with_format(Cursor::new(bytes), format)
+    let (width, height) = image::ImageReader::with_format(Cursor::new(bytes), format)
         .into_dimensions()
         .map_err(decode_failure)?;
 
-    if header_width == 0 || header_height == 0 {
-        return Err(ImageError::InvalidDimensions {
-            width: header_width,
-            height: header_height,
-        });
+    if width == 0 || height == 0 {
+        return Err(ImageError::InvalidDimensions { width, height });
     }
-    let pixel_count = u64::from(header_width) * u64::from(header_height);
+    let pixel_count = u64::from(width) * u64::from(height);
     if pixel_count > MAX_DECODED_PIXELS {
-        return Err(ImageError::TooLarge {
-            width: header_width,
-            height: header_height,
-        });
+        return Err(ImageError::TooLarge { width, height });
     }
+
+    Ok((format, width, height))
+}
+
+/// Decodes PNG, JPEG or GIF bytes to an opaque RGB image.
+///
+/// Alpha is ignored, not composited: an RGBA pixel keeps its colour channels
+/// and simply loses its alpha byte. For GIF input the first frame is decoded.
+/// Unsupported, truncated or malformed data returns an [`ImageError`] instead
+/// of panicking.
+pub fn decode(bytes: &[u8]) -> Result<RgbImage, ImageError> {
+    let (format, header_width, header_height) = format_and_dimensions(bytes)?;
 
     let mut limits = image::Limits::no_limits();
     limits.max_image_width = Some(header_width);

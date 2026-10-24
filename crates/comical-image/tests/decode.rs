@@ -2,7 +2,7 @@
 
 use std::io::Cursor;
 
-use comical_image::{ImageError, decode};
+use comical_image::{ImageError, decode, probe_size};
 use image::{DynamicImage, Frame, ImageFormat, Rgba, RgbaImage};
 
 fn encode(image: &DynamicImage, format: ImageFormat) -> Vec<u8> {
@@ -104,6 +104,22 @@ fn gif_decodes_the_first_frame() {
         pixel[0] > 150,
         "decoded the second frame instead of the first"
     );
+}
+
+#[test]
+fn probe_size_matches_decoded_dimensions_without_decoding() {
+    let source = image::RgbImage::from_pixel(37, 19, image::Rgb([9, 8, 7]));
+    let bytes = encode(&DynamicImage::ImageRgb8(source), ImageFormat::Png);
+    assert_eq!(probe_size(&bytes).expect("probe PNG"), (37, 19));
+}
+
+#[test]
+fn probe_size_rejects_empty_and_unsupported_input() {
+    assert!(matches!(probe_size(&[]), Err(ImageError::EmptyInput)));
+    assert!(matches!(
+        probe_size(b"not an image"),
+        Err(ImageError::UnsupportedFormat(_))
+    ));
 }
 
 #[test]
