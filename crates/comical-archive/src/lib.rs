@@ -212,8 +212,14 @@ pub(crate) struct Candidate<S> {
 
 /// Sorts candidates by the byte value of their full names and splits them into
 /// the public page list and the reader-specific source handles.
+///
+/// When every candidate shares a single root directory prefix (e.g. all entries
+/// are inside `Comic/`), that prefix is stripped so the book opens as if the
+/// wrapper folder did not exist. This implements "one-level recursive" opening
+/// for archives that bundle their pages inside a single top-level directory.
 pub(crate) fn select_pages<S>(candidates: Vec<Candidate<S>>) -> (Vec<PageEntry>, Vec<S>) {
     let mut candidates = candidates;
+    strip_common_root(&mut candidates);
     // Byte order, not natural or locale order. The sort is stable, so entries
     // with identical names keep their archive order.
     candidates.sort_by(|left, right| left.name.as_bytes().cmp(right.name.as_bytes()));
@@ -225,6 +231,29 @@ pub(crate) fn select_pages<S>(candidates: Vec<Candidate<S>>) -> (Vec<PageEntry>,
         sources.push(candidate.source);
     }
     (pages, sources)
+}
+
+/// If every candidate name starts with the same `dir/` prefix, remove it.
+///
+/// Only strips when *all* entries share the prefix, so mixed layouts (some
+/// files at root, some in subdirs) are left untouched. A bare filename without
+/// `/` never counts as a directory prefix.
+fn strip_common_root<S>(candidates: &mut [Candidate<S>]) {
+    if candidates.is_empty() {
+        return;
+    }
+    let first_slash = match candidates[0].name.find('/') {
+        Some(pos) => pos,
+        None => return,
+    };
+    let prefix = candidates[0].name[..first_slash + 1].to_owned();
+    if !candidates.iter().all(|c| c.name.starts_with(&prefix)) {
+        return;
+    }
+    let prefix_len = prefix.len();
+    for candidate in candidates.iter_mut() {
+        candidate.name = candidate.name[prefix_len..].to_owned();
+    }
 }
 
 pub(crate) fn page_count_error(pages: &[PageEntry]) -> Option<ArchiveError> {
