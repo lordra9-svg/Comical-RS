@@ -35,9 +35,9 @@ either one.
 
 ## Status
 
-The repository contains the M1 archive slice, the M2 core slice, the M3 image
-slice and the M4 viewer slice. The viewer runs on Windows and covers the M4
-scope. Toolbar, thumbnails, rotation, RTL, settings and CI are still to come.
+The repository contains the archive, core, image and viewer slices, plus
+cross-platform CI and an Info-ZIP/7-Zip interoperability corpus. Packaging and
+release review are still to come.
 
 ## Documentation rules
 

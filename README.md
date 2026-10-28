@@ -14,18 +14,13 @@ If you encounter forbidden material, stop and report it.
 
 ## Status
 
-M4 viewer slice. `comical-app` opens ZIP, RAR, 7z and directory books, draws
-one- and two-page spreads on a black canvas, and supports Fit, Fit Width, Fit
-Height, Original and Custom zoom, keyboard navigation, drag pan and fullscreen.
-`comical-cli` can list pages in the same formats and extract one page by index.
-ZIP supports stored, deflate and AES-256 entries; RAR 1.4 through 7 is covered,
-including solid, encrypted data and encrypted headers; 7z supports LZMA2 and
-AES-256. Multi-volume RAR is rejected as unsupported. `comical-core` provides
-page orientation, spread state, navigation, zoom, fit and oversize math;
-`comical-image` decodes PNG, JPEG and GIF and applies rotation and six filters.
-
-Toolbar, thumbnails, rotation, right-to-left drawing, settings and CI are still
-to come.
+M6 infrastructure slice in progress. The viewer opens ZIP, RAR, 7z and directory
+books with one- and two-page spreads, zoom modes, keyboard navigation, drag pan,
+fullscreen, toolbar, thumbnails, rotation, RTL, and persistent settings.
+`comical-cli` lists and extracts pages. Cross-platform CI runs on Windows,
+macOS and Linux. A real-writer archive corpus under `tests/corpus/` covers
+Info-ZIP and 7-Zip fixtures (list and exact-byte extract). Packaging and release
+review are still to come.
 
 ## Usage
 
@@ -80,7 +75,7 @@ Implementation details, file ownership and the maintenance runbook start at
 3. ~~Implement the spread state machine and zoom math in `comical-core`.~~
 4. ~~Image decoding, rotation and filters.~~
 5. ~~Minimal desktop UI: canvas, zoom modes, navigation, pan, fullscreen.~~
-6. Cross-platform CI and a real archive corpus.
+6. ~~Cross-platform CI and a real archive corpus.~~ (CI live; Info-ZIP/7-Zip corpus in tree; RAR writer samples still open)
 7. Packaging and release review.
 8. Add `Clean-Room: spec-v1` to every commit.
 

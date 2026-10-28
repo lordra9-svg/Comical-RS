@@ -192,7 +192,7 @@ lock. The current CLI is single-threaded.
   password prompt. Arrow keys turn pages instead of scrolling.
 - The app does not draw scrollbars; oversized content is panned with the mouse.
 - No macOS or Linux CI has run. The viewer has only been run on Windows.
-- No real-world archive corpus or image corpus has been tested.
+- Real-writer archive corpus covers Info-ZIP and 7-Zip; RAR writer samples and an image corpus are still open.
 - No fuzzing or malformed-input campaign has run.
 - No natural sort, WebP or AVIF. GIF uses the first frame only.
 - No EXIF orientation handling.

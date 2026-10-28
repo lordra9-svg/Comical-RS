@@ -7,9 +7,9 @@ use crate::{ImageError, RgbImage, allocate_rgb};
 
 static SRGB_TO_LINEAR: LazyLock<[f32; 256]> = LazyLock::new(|| {
     let mut lut = [0.0f32; 256];
-    for i in 0..256 {
+    for (i, slot) in lut.iter_mut().enumerate() {
         let c = i as f32 / 255.0;
-        lut[i] = if c <= 0.04045 {
+        *slot = if c <= 0.04045 {
             c / 12.92
         } else {
             ((c + 0.055) / 1.055).powf(2.4)
@@ -236,8 +236,6 @@ fn contributions(src_len: usize, dst_len: usize, filter: Filter) -> Vec<Contribu
         })
         .collect()
 }
-
-
 
 /// Horizontal pass: source `src_w x height` becomes `dst_w x height`.
 fn horizontal(

@@ -1,7 +1,7 @@
 # Testing
 
-The repository has 75 tests at the M4 slice, plus one doctest. Tests are
-layered so a failure points to one subsystem.
+The repository has layered unit, vector, integration and corpus tests, plus one
+doctest. A failure should point to one subsystem.
 
 ## Commands
 
@@ -27,6 +27,7 @@ same gate.
 |---|---|---:|---|
 | Archive unit | `comical-archive/src/lib.rs` | 2 | Byte sorting, duplicate stability, suffix filter |
 | Archive integration | `comical-archive/tests/archive.rs` | 20 | Formats, encryption, solid, caps, errors |
+| Archive corpus | `comical-archive/tests/corpus.rs` | 2 | Info-ZIP / 7-Zip fixtures, truncated failures |
 | Core vectors | `comical-core/tests/vectors.rs` | 2 | Every spread and zoom JSON case |
 | Core generated spreads | `comical-core/tests/spreads_generated.rs` | 6 | N = 1..12 invariants, boundaries, mode switches |
 | Core generated zoom | `comical-core/tests/zoom_generated.rs` | 8 | Orientations, modes, quirks, neighbors |
@@ -302,16 +303,23 @@ Check:
 Run the binary directly to see stderr. The tests compare exact output for
 `probe`; a formatting change will fail several tests.
 
+## Real-writer corpus
+
+`crates/comical-archive/tests/corpus.rs` reads `tests/corpus/manifest.json` and
+the committed Info-ZIP / 7-Zip fixtures under `tests/corpus/fixtures/`. It checks
+page order and exact extracted bytes (and SHA-256). Truncated fixtures must fail
+to open. Regenerate with `./scripts/regen-corpus.sh` when the writers or page
+stubs change. See `tests/corpus/README.md`.
+
 ## CI
 
-There is no CI yet. The current tests have only run on Windows with the GNU
-toolchain. macOS and Linux are not verified. Add a matrix that runs:
+`.github/workflows/ci.yml` runs on Windows, macOS and Linux:
 
 ```text
 cargo fmt --all -- --check
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --all-targets -- -D warnings
+cargo test
 ```
 
-Keep the archive tests in the matrix. They are pure Rust and should run on all
-three platforms.
+`scripts/ci.sh` is the local mirror. Keep the archive and corpus tests in the
+matrix; they are pure Rust and should run on all three platforms.

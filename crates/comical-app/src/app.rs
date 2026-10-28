@@ -951,7 +951,11 @@ impl App {
                 ui.heading("Reading");
                 ui.horizontal(|ui| {
                     ui.label("Direction:");
-                    let dir_label = if self.direction().is_rtl() { "RTL" } else { "LTR" };
+                    let dir_label = if self.direction().is_rtl() {
+                        "RTL"
+                    } else {
+                        "LTR"
+                    };
                     if ui.button(dir_label).clicked() {
                         self.toggle_direction();
                     }

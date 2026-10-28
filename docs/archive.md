@@ -109,7 +109,9 @@ would reduce exposure. Do not add it without tests that preserve the public API.
 
 Synthetic tests cover the tested features. Rows marked "Crate support" are
 available through the dependency but are not proven by this repository's tests.
-Real-world corpus coverage is still missing.
+`tests/corpus/` adds Info-ZIP and 7-Zip interoperability coverage (including
+solid 7z and ZipCrypto). RAR samples from an external RAR writer are still
+missing.
 
 ## ZIP reader
 
@@ -322,4 +324,6 @@ interoperability with every real-world writer. A real corpus is still required.
 - 7z reads reopen the file per page.
 - RAR read errors lose the original I/O kind.
 - Directory symlinks are skipped.
-- No real-world corpus or fuzzing yet.
+- RAR writer corpus and fuzzing are still open.
+- Solid 7z from real 7-Zip requires prior entries to be fully drained while
+  seeking; `src/sevenz.rs` does that (sevenz-rust issue #31).

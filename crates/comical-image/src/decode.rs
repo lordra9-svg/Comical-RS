@@ -22,9 +22,7 @@ pub fn probe_size(bytes: &[u8]) -> Result<(u32, u32), ImageError> {
     Ok((width, height))
 }
 
-fn format_and_dimensions(
-    bytes: &[u8],
-) -> Result<(image::ImageFormat, u32, u32), ImageError> {
+fn format_and_dimensions(bytes: &[u8]) -> Result<(image::ImageFormat, u32, u32), ImageError> {
     if bytes.is_empty() {
         return Err(ImageError::EmptyInput);
     }

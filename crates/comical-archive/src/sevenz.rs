@@ -143,6 +143,9 @@ impl ComicArchive for SevenZBook {
                     }
                     return Ok(false);
                 }
+                // Solid folders require prior entries to be fully consumed;
+                // otherwise later CRC checks fail (sevenz-rust issue #31).
+                io::copy(source, &mut io::sink()).map_err(SevenZError::io)?;
                 seen += 1;
                 Ok(true)
             })

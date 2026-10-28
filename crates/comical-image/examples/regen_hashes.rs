@@ -1,10 +1,13 @@
-use std::path::PathBuf;
 use comical_image::{Filter, RgbImage, resize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::path::PathBuf;
 
 fn hex_to_bytes(hex: &str) -> Vec<u8> {
-    (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i+2], 16).unwrap()).collect()
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+        .collect()
 }
 fn sha256_hex(bytes: &[u8]) -> String {
     let d = Sha256::digest(bytes);
@@ -38,7 +41,9 @@ fn main() {
         let th = case["target"]["height"].as_u64().unwrap() as u32;
         let output = resize(&image, tw, th, filter).unwrap();
         let hash = sha256_hex(output.pixels());
-        case.as_object_mut().unwrap().insert("output_sha256".to_owned(), Value::String(hash.clone()));
+        case.as_object_mut()
+            .unwrap()
+            .insert("output_sha256".to_owned(), Value::String(hash.clone()));
         eprintln!("{name}: {hash}");
     }
     std::fs::write(&path, serde_json::to_string_pretty(&root).unwrap() + "\n").unwrap();

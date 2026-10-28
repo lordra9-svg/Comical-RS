@@ -8,12 +8,12 @@ planned item as a contract until it has tests and a spec section.
 | Slice | State | Code |
 |---|---|---|
 | M0 spec and vectors | Done | `spec/behavior.md`, `tests/vectors/` |
-| M1 archive | Done on Windows | `comical-archive`, `comical-cli` |
+| M1 archive | Done | `comical-archive`, `comical-cli` |
 | M2 core layout and zoom | Done | `comical-core` |
-| M3 image pipeline | Done on Windows | `comical-image` |
-| M4 desktop UI | Done on Windows (M4 scope) | `comical-app` |
-| CI | Not started | no workflow files |
-| Real archive corpus | Not started | synthetic fixtures only |
+| M3 image pipeline | Done | `comical-image` |
+| M4–M5 desktop UI | Done | `comical-app` (toolbar, thumbs, rotation, RTL, settings) |
+| CI | Done | `.github/workflows/ci.yml`, `scripts/ci.sh` |
+| Real archive corpus | In progress | `tests/corpus/` Info-ZIP + 7-Zip; RAR writer samples open |
 | Packaging | Not started | no installers or associations |
 
 ## M3: image pipeline
@@ -65,16 +65,20 @@ Implemented:
 6. Drag-to-pan with clamping, pan reset on page and zoom changes.
 7. F11 fullscreen, error display in the canvas, window title from the file name.
 
-Still to do in M5 and later:
+Shipped after M4 (see `docs/app.md`):
 
-1. Map book order to screen order for RTL, including the half swap.
-2. Rotation for the left and right page.
+1. RTL screen mapping and half swap.
+2. Per-page rotation for left and right pages.
 3. Separate left and right page labels.
-4. Scrollbars, key scrolling and arrow-key scroll semantics.
-5. Toolbar, context menu, wheel and Ctrl+wheel input.
-6. Thumbnail browser.
-7. Settings, password prompt and last-page memory.
-8. macOS and Linux runs, plus the manual acceptance checklist on each.
+4. Scroll semantics and scrollbar thickness tracking.
+5. Toolbar and thumbnail browser.
+6. Persistent settings.
+
+Still open for later milestones:
+
+1. Context menu, wheel and Ctrl+wheel input.
+2. Password prompt UI and last-page memory.
+3. Manual acceptance checklist on macOS and Linux.
 
 Toolkit decision: eframe/egui with the `wgpu` backend, `rfd` for the file
 dialog, `lru` for the two caches.
@@ -89,31 +93,36 @@ first spread, LTR and RTL. Expand it before implementing the UI screen mapping.
 
 ### CI
 
-Add a matrix for Windows, macOS and Linux:
+Matrix for Windows, macOS and Linux is in `.github/workflows/ci.yml`:
 
 ```text
 cargo fmt --all -- --check
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --all-targets -- -D warnings
+cargo test
 ```
 
-Archive tests are pure Rust and should run everywhere. A failure on macOS or
-Linux is a release blocker until explained.
+`scripts/ci.sh` mirrors the same gate locally. A failure on any OS is a release
+blocker until explained.
 
 ### Real archive corpus
 
-Synthetic fixtures prove code paths. They do not prove interoperability.
+Synthetic `xtask` fixtures prove code paths. `tests/corpus/` proves
+interoperability with Info-ZIP and 7-Zip:
 
-Build a corpus with:
+- ZIP: Info-ZIP stored, deflate, ZipCrypto; 7-Zip ZIP deflate; Unicode and deep paths.
+- 7z: LZMA, LZMA2, solid LZMA2, AES-256 data, AES-256 headers.
+- Truncated ZIP and 7z must fail to open.
+- Manifest records page order, sizes and SHA-256 digests.
 
-- ZIP from several writers: stored, deflate, ZIP64, ZipCrypto, AES-256, CP437.
-- RAR 1.4 through 7: solid, encrypted data, encrypted headers, split volumes.
-- 7z: LZMA, LZMA2, BCJ, Delta, solid, AES-256, header encryption.
-- Corrupt and truncated variants.
-- Duplicate names, deep paths, Unicode names and very large entries.
+Still open:
 
-Keep copyrighted samples outside the repository. Record hashes and expected page
-lists. Run list and exact-byte checks.
+- ZIP64, ZipCrypto edge cases beyond the one fixture, CP437 from a non-Rust writer.
+- RAR samples from WinRAR / rarcli (no RAR writer on the corpus host yet).
+- 7z BCJ / Delta and very large entries.
+- Duplicate names.
+
+Keep copyrighted samples outside the repository. Regenerate with
+`./scripts/regen-corpus.sh`.
 
 ### Fuzzing
 

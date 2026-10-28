@@ -272,9 +272,8 @@ Before release, generate a full dependency license report with `cargo-about` or
 ## Known hardening work
 
 - Zeroize stored passwords.
-- Add a real archive corpus and fuzz targets.
+- Expand the real archive corpus (RAR writer samples, ZIP64, BCJ/Delta) and fuzz targets.
 - Add a page-count or total-memory budget.
-- Add CI for macOS and Linux.
 - Revisit 7z per-page reopen if large books are slow.
 - Preserve RAR read-time I/O error kind if callers need it.
 - Decide whether symlinked directory pages should be followed.

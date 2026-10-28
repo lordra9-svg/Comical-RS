@@ -1,0 +1,147 @@
+{
+  "password": "corpus-secret",
+  "pages": {
+    "a.png": {
+      "size": 4022,
+      "sha256": "d4e5ecda636215f49bf7eff379cd17fe1cd224bbda5050b6340bc6a2c9852030"
+    },
+    "b.jpg": {
+      "size": 4018,
+      "sha256": "0b9557afe0f0b842e21ddd0b327aef7d5ac32f693a2ebc8acff4a6685ad9e348"
+    },
+    "c.gif": {
+      "size": 4020,
+      "sha256": "41ce40c5d0b21fec946abfe7c25e8b47d29d384a211ccf48915ae4fa1a89a777"
+    },
+    "uni-日本語.png": {
+      "size": 2020,
+      "sha256": "84f67ec323c21b37faeb450d895f18257d9dc65be2fb3435ba6d8c21cee60ea0"
+    },
+    "deep/path/here/nested.png": {
+      "size": 2019,
+      "sha256": "88e438a1945f5b4afdeb48ea974e78c5d28b161c6bcfb9b6ed5c4cea1432c121"
+    }
+  },
+  "cases": [
+    {
+      "fixture": "infozip-store.cbz",
+      "writer": "infozip",
+      "password": false,
+      "pages": [
+        "a.png",
+        "b.jpg",
+        "c.gif"
+      ],
+      "expect": "ok"
+    },
+    {
+      "fixture": "infozip-deflate.cbz",
+      "writer": "infozip",
+      "password": false,
+      "pages": [
+        "a.png",
+        "b.jpg",
+        "c.gif"
+      ],
+      "expect": "ok"
+    },
+    {
+      "fixture": "sevenzip-zip-deflate.cbz",
+      "writer": "sevenzip",
+      "password": false,
+      "pages": [
+        "a.png",
+        "b.jpg",
+        "c.gif"
+      ],
+      "expect": "ok"
+    },
+    {
+      "fixture": "sevenzip-lzma2.cb7",
+      "writer": "sevenzip",
+      "password": false,
+      "pages": [
+        "a.png",
+        "b.jpg",
+        "c.gif"
+      ],
+      "expect": "ok"
+    },
+    {
+      "fixture": "sevenzip-lzma.cb7",
+      "writer": "sevenzip",
+      "password": false,
+      "pages": [
+        "a.png",
+        "b.jpg",
+        "c.gif"
+      ],
+      "expect": "ok"
+    },
+    {
+      "fixture": "sevenzip-solid.cb7",
+      "writer": "sevenzip",
+      "password": false,
+      "pages": [
+        "a.png",
+        "b.jpg",
+        "c.gif"
+      ],
+      "expect": "ok"
+    },
+    {
+      "fixture": "infozip-unicode-deep.cbz",
+      "writer": "infozip",
+      "password": false,
+      "pages": [
+        "deep/path/here/nested.png",
+        "uni-日本語.png"
+      ],
+      "expect": "ok"
+    },
+    {
+      "fixture": "infozip-zipcrypto.cbz",
+      "writer": "infozip",
+      "password": true,
+      "pages": [
+        "a.png",
+        "b.jpg"
+      ],
+      "expect": "ok"
+    },
+    {
+      "fixture": "sevenzip-aes.cb7",
+      "writer": "sevenzip",
+      "password": true,
+      "pages": [
+        "a.png",
+        "b.jpg"
+      ],
+      "expect": "ok"
+    },
+    {
+      "fixture": "sevenzip-aes-headers.cb7",
+      "writer": "sevenzip",
+      "password": true,
+      "pages": [
+        "a.png",
+        "b.jpg"
+      ],
+      "expect": "ok"
+    },
+    {
+      "fixture": "truncated-zip.cbz",
+      "writer": "truncated",
+      "password": false,
+      "pages": [],
+      "expect": "open_error"
+    },
+    {
+      "fixture": "truncated-7z.cb7",
+      "writer": "truncated",
+      "password": false,
+      "pages": [],
+      "expect": "open_error"
+    }
+  ]
+}

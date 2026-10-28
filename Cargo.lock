@@ -832,7 +832,10 @@ version = "0.1.0"
 dependencies = [
  "comical-core",
  "rars",
+ "serde",
+ "serde_json",
  "sevenz-rust",
+ "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.21",
  "xtask",

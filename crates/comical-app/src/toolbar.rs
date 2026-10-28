@@ -83,7 +83,11 @@ pub fn draw(ctx: &Context, app: &App) -> Option<ToolbarAction> {
 
                 ui.separator();
 
-                let dir_label = if app.direction().is_rtl() { "RTL" } else { "LTR" };
+                let dir_label = if app.direction().is_rtl() {
+                    "RTL"
+                } else {
+                    "LTR"
+                };
                 if toolbar_button(ui, dir_label, "Toggle reading direction (LTR/RTL)", enabled) {
                     action = Some(ToolbarAction::ToggleDirection);
                 }

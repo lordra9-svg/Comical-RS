@@ -105,12 +105,7 @@ pub fn draw(ctx: &Context, app: &mut App) -> Option<BrowserAction> {
     action
 }
 
-fn draw_row(
-    ui: &mut egui::Ui,
-    app: &mut App,
-    page: usize,
-    selected: bool,
-) -> egui::Response {
+fn draw_row(ui: &mut egui::Ui, app: &mut App, page: usize, selected: bool) -> egui::Response {
     let available_width = ui.available_width();
     let row_rect = ui.allocate_space(egui::vec2(available_width, ROW_HEIGHT)).1;
 
