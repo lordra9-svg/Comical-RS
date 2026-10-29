@@ -169,6 +169,16 @@ impl ArchiveError {
     pub(crate) fn unsupported(message: impl Into<String>) -> Self {
         Self::Unsupported(message.into())
     }
+
+    /// Whether the archive needs a password to list or read.
+    pub fn is_password_required(&self) -> bool {
+        matches!(self, Self::PasswordRequired)
+    }
+
+    /// Whether the supplied password was rejected.
+    pub fn is_bad_password(&self) -> bool {
+        matches!(self, Self::BadPassword)
+    }
 }
 
 /// Opens a book using default limits and no password.
@@ -476,6 +486,14 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn password_errors_report_whether_a_retry_is_needed() {
+        assert!(ArchiveError::PasswordRequired.is_password_required());
+        assert!(!ArchiveError::PasswordRequired.is_bad_password());
+        assert!(!ArchiveError::BadPassword.is_password_required());
+        assert!(ArchiveError::BadPassword.is_bad_password());
     }
 
     #[test]

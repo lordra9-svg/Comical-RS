@@ -35,6 +35,9 @@ App
   title, title_dirty
   settings: Settings                   persisted TOML, see below
   book_key: String                     canonical path, used by remember_page
+  pending_password_path: Option<String>
+                                        open attempt waiting for a password
+  password_prompt_open: bool           password prompt window state
 
 OpenedBook
   pages: Vec<PageEntry>
@@ -151,6 +154,17 @@ texture cache so the next frame decodes with the new kernel.
 `cache_bytes` and `resample_bytes` are parsed and persisted but do not yet drive
 the caches, which are counted in pages. That gap is tracked in
 `docs/roadmap.md`.
+
+## Password prompt
+
+Encrypted books list without a password and fail at read time, so the viewer
+detects the missing password through the decode result (`ArchiveError::
+is_password_required`) and opens the prompt window instead of a placeholder.
+
+The window asks for the password, submits it with `App::submit_password`, and
+retries the open. A wrong password keeps the prompt open; the error is drawn in
+the canvas. `App::cancel_password_prompt` closes it and keeps the previous
+book. Passwords are never persisted.
 
 ## Toolbar (`toolbar.rs`)
 

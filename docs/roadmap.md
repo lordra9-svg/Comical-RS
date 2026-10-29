@@ -85,9 +85,8 @@ Shipped after M4, second slice:
 Still open for later milestones:
 
 1. Context menu.
-2. Password prompt UI.
-3. Byte-budgeted caches driven by `cache_bytes` and `resample_bytes`.
-4. Manual acceptance checklist on macOS and Linux.
+2. Byte-budgeted caches driven by `cache_bytes` and `resample_bytes`.
+3. Manual acceptance checklist on macOS and Linux.
 
 Toolkit decision: eframe/egui with the `wgpu` backend, `rfd` for the file
 dialog, `lru` for the two caches.

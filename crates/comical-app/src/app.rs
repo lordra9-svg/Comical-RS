@@ -67,6 +67,8 @@ struct DecodeResult {
     generation: u64,
     image: ColorImage,
     name: String,
+    /// An encrypted entry needed a password the prompt has not asked for yet.
+    password_required: bool,
 }
 
 /// Work sent to the background thumbnail thread.
@@ -117,6 +119,9 @@ struct OpenedBook {
     thumb_rx: Receiver<ThumbResult>,
     /// Resampling filter for pages that have to be scaled.
     filter: Filter,
+    /// Set when a background decode reported an encrypted entry that still
+    /// needs a password.
+    password_required: bool,
 }
 
 impl OpenedBook {
@@ -180,6 +185,7 @@ impl OpenedBook {
             thumb_tx,
             thumb_rx,
             filter,
+            password_required: false,
         }
     }
 
@@ -365,6 +371,9 @@ impl OpenedBook {
                 // stall the frame for a page the reader has already left.
                 continue;
             }
+            if result.password_required {
+                self.password_required = true;
+            }
             let handle = ctx.load_texture(result.name, result.image, TextureOptions::LINEAR);
             self.textures.put(result.key, handle);
             uploaded = true;
@@ -403,12 +412,16 @@ fn decode_request(
         .read_page(req.key.page, DEFAULT_MAX_ENTRY_BYTES)
     {
         Ok(bytes) => bytes,
-        Err(_) => return placeholder_result(req, name),
+        Err(error) => {
+            // Encrypted entries list without a password but fail at read
+            // time; report that so the app can offer the password prompt.
+            return placeholder_result(req, name, error.is_password_required());
+        }
     };
 
     let decoded = match decode(&bytes) {
         Ok(image) => image,
-        Err(_) => return placeholder_result(req, name),
+        Err(_) => return placeholder_result(req, name, false),
     };
 
     let rotated = if req.key.rotation != Rotation::North {
@@ -436,15 +449,17 @@ fn decode_request(
         generation: req.generation,
         image: ColorImage::from_rgb(size, image.pixels()),
         name,
+        password_required: false,
     }
 }
 
-fn placeholder_result(req: &DecodeRequest, name: String) -> DecodeResult {
+fn placeholder_result(req: &DecodeRequest, name: String, password_required: bool) -> DecodeResult {
     DecodeResult {
         key: req.key,
         generation: req.generation,
         image: ColorImage::from_rgb([1, 1], &[0, 0, 0]),
         name,
+        password_required,
     }
 }
 
@@ -547,6 +562,10 @@ pub struct App {
     settings_open: bool,
     /// Canonical identity of the open book, used by `remember_page`.
     book_key: String,
+    /// Book whose open attempt asked for a password, if any.
+    pending_password_path: Option<String>,
+    /// Whether the password prompt window is currently open.
+    password_prompt_open: bool,
 }
 
 impl App {
@@ -580,6 +599,8 @@ impl App {
             title_dirty: true,
             settings_open: false,
             book_key: String::new(),
+            pending_password_path: None,
+            password_prompt_open: false,
         }
     }
 
@@ -601,10 +622,31 @@ impl App {
     ///
     /// This is the entry point from the command line and from the open dialog.
     /// On failure the previously open book is left untouched.
+    ///
+    /// An encrypted archive returns
+    /// [`AppError::OpenBook`] with `ArchiveError::PasswordRequired`; the app
+    /// then opens the password prompt for `path`.
     pub fn open_book(&mut self, path: &str) -> Result<(), AppError> {
         let options =
             comical_archive::OpenOptions::new().with_natural_sort(self.settings.natural_sort);
-        let archive = comical_archive::open_with_options(path, options)?;
+        let archive = match comical_archive::open_with_options(path, options) {
+            Ok(archive) => archive,
+            Err(error) => {
+                if error.is_password_required() {
+                    self.pending_password_path = Some(path.to_owned());
+                }
+                return Err(AppError::OpenBook(error));
+            }
+        };
+        self.install_book(path, archive)
+    }
+
+    /// Installs a freshly opened archive as the open book and navigates.
+    fn install_book(
+        &mut self,
+        path: &str,
+        archive: Box<dyn comical_archive::ComicArchive + Send>,
+    ) -> Result<(), AppError> {
         let count = archive.pages().len();
         let orientations = vec![PageOrientation::Portrait; count];
         let rotations = vec![Rotation::North; count];
@@ -627,6 +669,41 @@ impl App {
             self.go_to_page(page.min(count.saturating_sub(1)));
         }
         Ok(())
+    }
+
+    /// Answers a pending password prompt and retries the open.
+    ///
+    /// Returns `true` when the retry installed a book. A wrong password keeps
+    /// the prompt open for another attempt; the error is only surfaced when the
+    /// prompt is dismissed.
+    pub fn submit_password(&mut self, password: &str) -> bool {
+        let Some(path) = self.pending_password_path.clone() else {
+            return false;
+        };
+        let options = comical_archive::OpenOptions::new()
+            .with_password(Some(password))
+            .with_natural_sort(self.settings.natural_sort);
+        let archive = match comical_archive::open_with_options(&path, options) {
+            Ok(archive) => archive,
+            Err(error) => {
+                if error.is_bad_password() {
+                    self.error = Some(error.to_string());
+                }
+                return false;
+            }
+        };
+        if self.install_book(&path, archive).is_ok() {
+            self.pending_password_path = None;
+            self.password_prompt_open = false;
+            return true;
+        }
+        false
+    }
+
+    /// Cancels the password prompt and keeps the previous book open.
+    pub fn cancel_password_prompt(&mut self) {
+        self.pending_password_path = None;
+        self.password_prompt_open = false;
     }
 
     /// Show a native file-open dialog and open the selected book.
@@ -976,6 +1053,52 @@ impl App {
         self.settings_open
     }
 
+    /// Draws the password prompt while an open attempt needs one.
+    ///
+    /// Returns `true` while the prompt is open, so the frame can be scheduled.
+    pub fn draw_password_prompt(&mut self, ctx: &Context) -> bool {
+        if self.pending_password_path.is_none() {
+            return false;
+        }
+        let mut open = self.password_prompt_open;
+        let response = egui::Window::new("Password required")
+            .id(egui::Id::new("comical-password-prompt"))
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                let Some(path) = self.pending_password_path.clone() else {
+                    return;
+                };
+                ui.label(format!("This archive is encrypted: {}", path));
+                let mut password = String::new();
+                ui.add(
+                    egui::TextEdit::singleline(&mut password)
+                        .password(true)
+                        .hint_text("Password")
+                        .desired_width(280.0),
+                );
+                if ui.button("Open").clicked() {
+                    let password = std::mem::take(&mut password);
+                    self.submit_password(&password);
+                }
+                if ui.button("Cancel").clicked() {
+                    self.cancel_password_prompt();
+                }
+            });
+        let open_flag = response.is_some();
+        if !self.pending_password_path.is_some() {
+            // A submit or cancel cleared the prompt during this frame.
+            self.password_prompt_open = false;
+        } else {
+            self.password_prompt_open = open_flag;
+        }
+        if !self.password_prompt_open {
+            self.pending_password_path = None;
+        }
+        self.pending_password_path.is_some() && self.password_prompt_open
+    }
+
     /// Draw the settings window if open.
     pub fn draw_settings(&mut self, ctx: &Context) {
         if !self.settings_open {
@@ -1232,25 +1355,33 @@ impl App {
         self.pan = (0.0, 0.0);
         self.sync_settings();
     }
+
+    /// Drain completed background decodes and upload them as GPU textures.
+    fn drain_decoded(&mut self, ctx: &Context) -> bool {
+        let mut uploaded = false;
+        if let Some(book) = self.book.as_mut() {
+            uploaded = book.drain_decoded(ctx);
+            if book.password_required {
+                // An encrypted entry needed a password the prompt has not asked
+                // for yet; offer the prompt instead of a permanent placeholder.
+                book.password_required = false;
+                let path = self.book_key.clone();
+                if !path.is_empty() {
+                    self.pending_password_path = Some(path);
+                }
+            }
+        }
+        uploaded
+    }
+
+    fn has_pending_work(&self) -> bool {
+        self.book.as_ref().is_some_and(OpenedBook::has_pending)
+    }
 }
 
 impl Default for App {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl App {
-    fn drain_decoded(&mut self, ctx: &Context) -> bool {
-        if let Some(book) = self.book.as_mut() {
-            book.drain_decoded(ctx)
-        } else {
-            false
-        }
-    }
-
-    fn has_pending_work(&self) -> bool {
-        self.book.as_ref().is_some_and(OpenedBook::has_pending)
     }
 }
 
@@ -1275,6 +1406,9 @@ impl eframe::App for App {
         let decoded = self.drain_decoded(ctx);
 
         crate::view::draw(ctx, self);
+        if self.draw_password_prompt(ctx) {
+            ctx.request_repaint();
+        }
         self.draw_settings(ctx);
 
         // Background results arrive without an input event. Keep a frame
@@ -1394,6 +1528,67 @@ mod tests {
         assert_eq!(app.zoom().zoom, ZoomMode::Width);
         assert_eq!(app.zoom().custom_percent, 100);
         assert!(!app.has_book());
+    }
+
+    #[test]
+    fn encrypted_book_lists_and_reports_the_missing_password() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let path = directory.path().join("book.cbz");
+        xtask::write_zip(
+            &path,
+            &[xtask::FixtureEntry::new("secret.png", b"png-bytes")],
+            xtask::ZipMethod::Deflate,
+            xtask::ZipEncryption::Aes256,
+            Some("open-sesame"),
+        )
+        .expect("write encrypted zip");
+        let book = path.to_str().expect("temp path is utf-8");
+
+        // Encrypted entries list without a password but fail at read time, so
+        // the open succeeds and the read reports the missing password.
+        let mut app = App::with_settings(Settings::default());
+        app.open_book(book)
+            .expect("encrypted book lists without a password");
+        assert!(app.has_book());
+
+        let archive: std::sync::Arc<
+            std::sync::Mutex<Box<dyn comical_archive::ComicArchive + Send>>,
+        > = std::sync::Arc::new(std::sync::Mutex::new(
+            comical_archive::open(book).expect("open encrypted book"),
+        ));
+        let request = DecodeRequest {
+            key: TextureKey {
+                page: 0,
+                part: PagePart::Full,
+                rotation: Rotation::North,
+                filter: Filter::CatmullRom,
+            },
+            generation: 0,
+        };
+        let result = decode_request(&archive, &request);
+        assert!(result.password_required);
+    }
+
+    #[test]
+    fn password_prompt_can_be_cancelled() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let path = directory.path().join("book.cbz");
+        xtask::write_zip(
+            &path,
+            &[xtask::FixtureEntry::new("page.png", b"png-bytes")],
+            xtask::ZipMethod::Store,
+            xtask::ZipEncryption::None,
+            None,
+        )
+        .expect("write zip");
+        let book = path.to_str().expect("temp path is utf-8");
+
+        let mut app = App::with_settings(Settings::default());
+        app.pending_password_path = Some(book.to_owned());
+        app.password_prompt_open = true;
+        app.cancel_password_prompt();
+        assert!(app.pending_password_path.is_none());
+        assert!(!app.submit_password("open-sesame"));
     }
 
     #[test]
