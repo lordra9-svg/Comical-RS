@@ -4,6 +4,7 @@
 //! and saved atomically on exit. A missing or corrupt file falls back to
 //! defaults without crashing.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -94,6 +95,13 @@ pub struct Settings {
     /// Remember the last page read per book.
     #[serde(default)]
     pub remember_page: bool,
+
+    /// Last page read per book, keyed by canonical path.
+    ///
+    /// Only maintained when `remember_page` is on. Bounded so the settings
+    /// file cannot grow without limit.
+    #[serde(default)]
+    pub last_pages: BTreeMap<String, usize>,
 }
 
 impl Default for Settings {
@@ -118,6 +126,7 @@ impl Default for Settings {
             natural_sort: false,
             exif_orientation: false,
             remember_page: false,
+            last_pages: BTreeMap::new(),
         }
     }
 }
@@ -447,6 +456,7 @@ mod tests {
             natural_sort: true,
             exif_orientation: true,
             remember_page: true,
+            last_pages: BTreeMap::from([("/home/user/comics/a.cbz".to_owned(), 7)]),
         };
 
         let serialized = toml::to_string_pretty(&original).expect("serialize");
@@ -471,6 +481,7 @@ mod tests {
         assert_eq!(restored.natural_sort, original.natural_sort);
         assert_eq!(restored.exif_orientation, original.exif_orientation);
         assert_eq!(restored.remember_page, original.remember_page);
+        assert_eq!(restored.last_pages, original.last_pages);
     }
 
     #[test]
@@ -531,6 +542,7 @@ mod tests {
         assert!(serialized.contains("natural_sort"));
         assert!(serialized.contains("exif_orientation"));
         assert!(serialized.contains("remember_page"));
+        assert!(serialized.contains("last_pages"));
         assert!(serialized.contains("version"));
     }
 }

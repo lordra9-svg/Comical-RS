@@ -12,6 +12,7 @@ mod rar;
 mod sevenz;
 mod zip;
 
+use std::cmp::Ordering;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
@@ -44,6 +45,11 @@ pub struct OpenOptions<'a> {
     pub password: Option<&'a str>,
     /// Upper bound for a single decoded entry, in bytes.
     pub max_entry_bytes: u64,
+    /// Sort digit runs numerically (`page2` before `page10`).
+    ///
+    /// Off by default: the behavior spec defines book order as byte order, and
+    /// the setting is opt-in.
+    pub natural_sort: bool,
 }
 
 impl Default for OpenOptions<'_> {
@@ -51,6 +57,7 @@ impl Default for OpenOptions<'_> {
         Self {
             password: None,
             max_entry_bytes: DEFAULT_MAX_ENTRY_BYTES,
+            natural_sort: false,
         }
     }
 }
@@ -64,6 +71,12 @@ impl<'a> OpenOptions<'a> {
     /// Sets the password used for encrypted archives.
     pub fn with_password(mut self, password: Option<&'a str>) -> Self {
         self.password = password;
+        self
+    }
+
+    /// Enables natural (numeric-aware) page ordering.
+    pub fn with_natural_sort(mut self, natural_sort: bool) -> Self {
+        self.natural_sort = natural_sort;
         self
     }
 }
@@ -171,14 +184,14 @@ pub fn open_with_options(
     let path = path.as_ref();
 
     if path.is_dir() {
-        return directory::open(path);
+        return directory::open(path, &options);
     }
 
     match format_for(path) {
         Some(ArchiveFormat::Zip) => zip::open(path, &options),
         Some(ArchiveFormat::Rar) => rar::open(path, &options),
         Some(ArchiveFormat::SevenZ) => sevenz::open(path, &options),
-        Some(ArchiveFormat::Directory) => directory::open(path),
+        Some(ArchiveFormat::Directory) => directory::open(path, &options),
         None => Err(ArchiveError::CannotOpen {
             path: path.to_path_buf(),
         }),
@@ -217,12 +230,19 @@ pub(crate) struct Candidate<S> {
 /// are inside `Comic/`), that prefix is stripped so the book opens as if the
 /// wrapper folder did not exist. This implements "one-level recursive" opening
 /// for archives that bundle their pages inside a single top-level directory.
-pub(crate) fn select_pages<S>(candidates: Vec<Candidate<S>>) -> (Vec<PageEntry>, Vec<S>) {
+pub(crate) fn select_pages<S>(
+    candidates: Vec<Candidate<S>>,
+    natural_sort: bool,
+) -> (Vec<PageEntry>, Vec<S>) {
     let mut candidates = candidates;
     strip_common_root(&mut candidates);
-    // Byte order, not natural or locale order. The sort is stable, so entries
-    // with identical names keep their archive order.
-    candidates.sort_by(|left, right| left.name.as_bytes().cmp(right.name.as_bytes()));
+    if natural_sort {
+        candidates.sort_by(|left, right| natural_cmp(&left.name, &right.name));
+    } else {
+        // Byte order, not natural or locale order. The sort is stable, so
+        // entries with identical names keep their archive order.
+        candidates.sort_by(|left, right| left.name.as_bytes().cmp(right.name.as_bytes()));
+    }
 
     let mut pages = Vec::with_capacity(candidates.len());
     let mut sources = Vec::with_capacity(candidates.len());
@@ -231,6 +251,63 @@ pub(crate) fn select_pages<S>(candidates: Vec<Candidate<S>>) -> (Vec<PageEntry>,
         sources.push(candidate.source);
     }
     (pages, sources)
+}
+
+/// Compares two entry names with runs of ASCII digits treated as numbers.
+///
+/// Everything outside a digit run compares by byte value, so natural order is
+/// a strict refinement of the default book order: only names that differ in a
+/// number can move. Numeric runs compare by value regardless of width, so
+/// `page9` sorts before `page10`. Runs with equal value fall back to the run
+/// length (`2` before `02`), which keeps the comparator total.
+fn natural_cmp(left: &str, right: &str) -> Ordering {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    let (mut left_at, mut right_at) = (0usize, 0usize);
+
+    while left_at < left.len() && right_at < right.len() {
+        let (left_byte, right_byte) = (left[left_at], right[right_at]);
+        if left_byte.is_ascii_digit() && right_byte.is_ascii_digit() {
+            let left_end = digit_run_end(left, left_at);
+            let right_end = digit_run_end(right, right_at);
+            let left_digits = trim_leading_zeros(&left[left_at..left_end]);
+            let right_digits = trim_leading_zeros(&right[right_at..right_end]);
+            let order = left_digits
+                .len()
+                .cmp(&right_digits.len())
+                .then_with(|| left_digits.cmp(right_digits))
+                .then_with(|| (left_end - left_at).cmp(&(right_end - right_at)));
+            if order != Ordering::Equal {
+                return order;
+            }
+            left_at = left_end;
+            right_at = right_end;
+            continue;
+        }
+        if left_byte != right_byte {
+            return left_byte.cmp(&right_byte);
+        }
+        left_at += 1;
+        right_at += 1;
+    }
+
+    left.len().cmp(&right.len())
+}
+
+fn digit_run_end(bytes: &[u8], start: usize) -> usize {
+    let mut end = start;
+    while end < bytes.len() && bytes[end].is_ascii_digit() {
+        end += 1;
+    }
+    end
+}
+
+fn trim_leading_zeros(digits: &[u8]) -> &[u8] {
+    let first = digits
+        .iter()
+        .position(|byte| *byte != b'0')
+        .unwrap_or(digits.len());
+    &digits[first..]
 }
 
 /// If every candidate name starts with the same `dir/` prefix, remove it.
@@ -313,7 +390,7 @@ mod tests {
                 source: 4,
             },
         ];
-        let (pages, sources) = select_pages(candidates);
+        let (pages, sources) = select_pages(candidates, false);
         let names: Vec<&str> = pages.iter().map(|page| page.name.as_str()).collect();
         assert_eq!(
             names,
@@ -322,6 +399,83 @@ mod tests {
         assert_eq!(sources, vec![4, 2, 1, 3]);
         assert_eq!(pages[2].size, 2);
         assert_eq!(pages[3].size, 20);
+    }
+
+    fn candidate(name: &str, source: usize) -> Candidate<usize> {
+        Candidate {
+            name: name.to_owned(),
+            size: source as u64,
+            source,
+        }
+    }
+
+    #[test]
+    fn natural_sort_orders_digit_runs_by_value() {
+        let candidates = vec![
+            candidate("page10.png", 1),
+            candidate("page2.png", 2),
+            candidate("page1.png", 3),
+            candidate("page02.png", 4),
+            candidate("page100.png", 5),
+        ];
+        let (pages, sources) = select_pages(candidates, true);
+        let names: Vec<&str> = pages.iter().map(|page| page.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "page1.png",
+                "page2.png",
+                "page02.png",
+                "page10.png",
+                "page100.png"
+            ]
+        );
+        assert_eq!(sources, vec![3, 2, 4, 1, 5]);
+    }
+
+    #[test]
+    fn natural_sort_only_changes_digit_runs() {
+        // Names without digits keep byte order, including case.
+        let candidates = vec![
+            candidate("b.png", 1),
+            candidate("A.png", 2),
+            candidate("a.png", 3),
+        ];
+        let (pages, _) = select_pages(candidates, true);
+        let names: Vec<&str> = pages.iter().map(|page| page.name.as_str()).collect();
+        assert_eq!(names, vec!["A.png", "a.png", "b.png"]);
+    }
+
+    #[test]
+    fn natural_sort_handles_long_digit_runs_without_overflow() {
+        let candidates = vec![
+            candidate("99999999999999999999999.png", 1),
+            candidate("100000000000000000000000.png", 2),
+        ];
+        let (pages, _) = select_pages(candidates, true);
+        let names: Vec<&str> = pages.iter().map(|page| page.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "99999999999999999999999.png",
+                "100000000000000000000000.png"
+            ]
+        );
+    }
+
+    #[test]
+    fn natural_sort_is_a_total_order() {
+        let names = ["a2b10", "a2b9", "a02b9", "a10", "a2", "a", "a0", "a00"];
+        for left in names {
+            for right in names {
+                let forward = natural_cmp(left, right);
+                let backward = natural_cmp(right, left);
+                assert_eq!(forward, backward.reverse(), "{left} vs {right}");
+                if left == right {
+                    assert_eq!(forward, Ordering::Equal);
+                }
+            }
+        }
     }
 
     #[test]

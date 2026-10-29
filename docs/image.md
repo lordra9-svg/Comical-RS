@@ -95,6 +95,13 @@ Do not add an equal-size fast path. The golden tests will fail.
 Cubic polynomials use nested evaluation. Do not use `pow`. The last bit matters
 for the exact hashes.
 
+Lanczos needs `sin(PI * x)`. The implementation does not call `f64::sin`: the
+platform libm (glibc, the MSVC UCRT, Apple's libm) disagrees in the last bit for
+some arguments, and one flipped `f32` weight changes an output byte, which made
+the macOS arm64 job fail while Linux and Windows passed. `resize::sin_pi` uses a
+Cody-Waite reduction by `PI/2` plus Taylor polynomials, so every target computes
+the same weights. The 42 golden hashes are unchanged by that substitution.
+
 ## Golden vectors
 
 File: `tests/vectors/images.json`.

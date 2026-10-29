@@ -26,6 +26,9 @@ enum Command {
         /// Password for an encrypted archive.
         #[arg(long)]
         password: Option<String>,
+        /// Sort digit runs numerically (`page2` before `page10`).
+        #[arg(long)]
+        natural_sort: bool,
     },
     /// Write one page to a file.
     Extract {
@@ -38,6 +41,9 @@ enum Command {
         /// Password for an encrypted archive.
         #[arg(long)]
         password: Option<String>,
+        /// Sort digit runs numerically (`page2` before `page10`).
+        #[arg(long)]
+        natural_sort: bool,
     },
 }
 
@@ -53,8 +59,12 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
-        Command::Probe { book, password } => {
-            let archive = open(&book, password.as_deref())?;
+        Command::Probe {
+            book,
+            password,
+            natural_sort,
+        } => {
+            let archive = open(&book, password.as_deref(), natural_sort)?;
             if archive.pages().is_empty() {
                 return Err("This archive does not contain any pages.".to_owned());
             }
@@ -68,8 +78,9 @@ fn run(cli: Cli) -> Result<(), String> {
             index,
             out,
             password,
+            natural_sort,
         } => {
-            let mut archive = open(&book, password.as_deref())?;
+            let mut archive = open(&book, password.as_deref(), natural_sort)?;
             if index >= archive.pages().len() {
                 return Err(format!(
                     "page index {index} is out of range; this book has {} pages",
@@ -89,7 +100,10 @@ fn run(cli: Cli) -> Result<(), String> {
 fn open(
     book: &std::path::Path,
     password: Option<&str>,
+    natural_sort: bool,
 ) -> Result<Box<dyn comical_archive::ComicArchive>, String> {
-    let options = OpenOptions::new().with_password(password);
+    let options = OpenOptions::new()
+        .with_password(password)
+        .with_natural_sort(natural_sort);
     open_with_options(book, options).map_err(|error| error.to_string())
 }

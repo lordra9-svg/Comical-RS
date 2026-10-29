@@ -321,5 +321,15 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
+The workflow uses `actions/checkout@v7` and `Swatinem/rust-cache@v2`, both of
+which run on the Node 24 action runtime; `checkout@v4` is the last node20
+release and triggers a deprecation warning. Superseded runs on the same ref are
+cancelled, and the token is limited to `contents: read`. There is no JavaScript
+in the product, so Node exists only for the actions themselves.
+
 `scripts/ci.sh` is the local mirror. Keep the archive and corpus tests in the
 matrix; they are pure Rust and should run on all three platforms.
+
+Golden image hashes are expected to be bit-identical everywhere. The Lanczos
+kernel must not call the platform `f64::sin`; see `docs/image.md`. A failure on
+one OS only is a determinism bug, not a flaky test.

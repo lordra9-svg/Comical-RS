@@ -29,3 +29,75 @@ fn opening_a_book_decodes_page_zero_at_its_natural_size() {
     assert_eq!(app.page_count(), 1);
     assert_eq!(app.page_size(0).expect("decode page 0"), Size::new(4, 3));
 }
+
+#[test]
+fn natural_sort_setting_reorders_pages_on_open() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    for name in ["page10.png", "page2.png", "page1.png"] {
+        std::fs::write(directory.path().join(name), PAGE_PNG).expect("write png page");
+    }
+    let path = directory.path().to_str().expect("temp path is utf-8");
+
+    let mut byte_order = App::with_settings(comical_app::Settings::default());
+    byte_order.open_book(path).expect("open book");
+    let names: Vec<&str> = (0..byte_order.page_count())
+        .map(|page| byte_order.page_name(page).expect("page name"))
+        .collect();
+    assert_eq!(names, vec!["page1.png", "page10.png", "page2.png"]);
+
+    let mut natural = App::with_settings(comical_app::Settings {
+        natural_sort: true,
+        ..Default::default()
+    });
+    natural.open_book(path).expect("open book");
+    let names: Vec<&str> = (0..natural.page_count())
+        .map(|page| natural.page_name(page).expect("page name"))
+        .collect();
+    assert_eq!(names, vec!["page1.png", "page2.png", "page10.png"]);
+}
+
+#[test]
+fn remember_page_restores_the_last_page_of_a_book() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    for name in ["page0.png", "page1.png", "page2.png", "page3.png"] {
+        std::fs::write(directory.path().join(name), PAGE_PNG).expect("write png page");
+    }
+    let path = directory.path().to_str().expect("temp path is utf-8");
+
+    let mut app = App::with_settings(comical_app::Settings {
+        remember_page: true,
+        mode: comical_core::ViewMode::OnePage,
+        ..Default::default()
+    });
+    app.open_book(path).expect("open book");
+    app.go_to_page(2);
+    assert_eq!(app.current_page(), Some(2));
+
+    // Reopening the same book starts on the remembered page.
+    app.open_book(path).expect("reopen book");
+    assert_eq!(app.current_page(), Some(2));
+
+    // Without the setting the book always starts at page 0.
+    let mut fresh = App::with_settings(comical_app::Settings {
+        mode: comical_core::ViewMode::OnePage,
+        ..Default::default()
+    });
+    fresh.open_book(path).expect("open book");
+    assert_eq!(fresh.current_page(), Some(0));
+}
+
+#[test]
+fn filter_setting_is_stored_and_updated() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    std::fs::write(directory.path().join("page0.png"), PAGE_PNG).expect("write png page");
+    let path = directory.path().to_str().expect("temp path is utf-8");
+
+    let mut app = App::with_settings(comical_app::Settings {
+        filter: comical_image::Filter::Lanczos3,
+        ..Default::default()
+    });
+    app.open_book(path).expect("open book");
+    assert_eq!(app.settings().filter, comical_image::Filter::Lanczos3);
+    app.set_filter(comical_image::Filter::Box);
+    assert_eq!(app.settings().filter, comical_image::Filter::Box);
+}

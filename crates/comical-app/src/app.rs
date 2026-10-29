@@ -35,8 +35,8 @@ const CACHE_PAGES: usize = 10;
 /// below this limit and are uploaded at their natural size.
 const TEXTURE_MAX_SIDE: u32 = 4096;
 
-/// Resampling filter used when a page has to be scaled.
-const RESAMPLE_FILTER: Filter = Filter::CatmullRom;
+/// Books whose last page is kept when `remember_page` is on.
+const MAX_REMEMBERED_BOOKS: usize = 200;
 
 /// Number of thumbnail requests that may wait for the thumbnail worker.
 const THUMB_QUEUE: usize = 32;
@@ -51,6 +51,7 @@ struct TextureKey {
     page: usize,
     part: PagePart,
     rotation: Rotation,
+    filter: Filter,
 }
 
 /// Work sent to the background decode thread.
@@ -114,10 +115,12 @@ struct OpenedBook {
     thumb_tx: Sender<ThumbRequest>,
     /// Receives completed thumbnails from the background worker.
     thumb_rx: Receiver<ThumbResult>,
+    /// Resampling filter for pages that have to be scaled.
+    filter: Filter,
 }
 
 impl OpenedBook {
-    fn new(archive: Box<dyn ComicArchive + Send>) -> Self {
+    fn new(archive: Box<dyn ComicArchive + Send>, filter: Filter) -> Self {
         let pages = archive.pages().to_vec();
         let count = pages.len();
         let (decode_tx, worker_rx) = unbounded::<DecodeRequest>();
@@ -176,6 +179,7 @@ impl OpenedBook {
             thumb_pending: std::collections::HashSet::new(),
             thumb_tx,
             thumb_rx,
+            filter,
         }
     }
 
@@ -290,6 +294,7 @@ impl OpenedBook {
             page,
             part,
             rotation,
+            filter: self.filter,
         };
         if let Some(handle) = self.textures.get(&key) {
             return Ok(handle.clone());
@@ -422,7 +427,7 @@ fn decode_request(
     let image = if width == image.width() && height == image.height() {
         image
     } else {
-        resize(&image, width, height, RESAMPLE_FILTER).unwrap_or(image)
+        resize(&image, width, height, req.key.filter).unwrap_or(image)
     };
 
     let size = [image.width() as usize, image.height() as usize];
@@ -540,12 +545,21 @@ pub struct App {
     title_dirty: bool,
     /// Whether the settings window is currently open.
     settings_open: bool,
+    /// Canonical identity of the open book, used by `remember_page`.
+    book_key: String,
 }
 
 impl App {
     /// Creates an empty application, loading persisted settings from disk.
     pub fn new() -> Self {
-        let settings = Settings::load();
+        Self::with_settings(Settings::load())
+    }
+
+    /// Creates an empty application with explicit settings.
+    ///
+    /// `new` loads these from disk; tests and embedders can pass their own so
+    /// a developer's saved settings never leak into a run.
+    pub fn with_settings(settings: Settings) -> Self {
         let mut zoom = ZoomOptions::new(settings.mode, settings.zoom);
         zoom.custom_percent = settings.zoom_percent;
         zoom.fit_only_if_oversized = settings.fit_only_oversize;
@@ -565,6 +579,7 @@ impl App {
             title: "comical".to_owned(),
             title_dirty: true,
             settings_open: false,
+            book_key: String::new(),
         }
     }
 
@@ -587,12 +602,14 @@ impl App {
     /// This is the entry point from the command line and from the open dialog.
     /// On failure the previously open book is left untouched.
     pub fn open_book(&mut self, path: &str) -> Result<(), AppError> {
-        let archive = comical_archive::open(path)?;
+        let options =
+            comical_archive::OpenOptions::new().with_natural_sort(self.settings.natural_sort);
+        let archive = comical_archive::open_with_options(path, options)?;
         let count = archive.pages().len();
         let orientations = vec![PageOrientation::Portrait; count];
         let rotations = vec![Rotation::North; count];
         let spread = SpreadState::new(orientations.clone(), self.zoom.mode)?;
-        let book = OpenedBook::new(archive);
+        let book = OpenedBook::new(archive, self.settings.filter);
 
         self.book = Some(book);
         self.orientations = orientations;
@@ -603,6 +620,12 @@ impl App {
         self.error = None;
         self.title = title_for(path);
         self.title_dirty = true;
+        self.book_key = book_key(path);
+        if self.settings.remember_page
+            && let Some(&page) = self.settings.last_pages.get(&self.book_key)
+        {
+            self.go_to_page(page.min(count.saturating_sub(1)));
+        }
         Ok(())
     }
 
@@ -610,10 +633,15 @@ impl App {
     ///
     /// Called from the UI thread only, when the user presses the open button.
     pub fn open_file_dialog(&mut self) {
-        let picked = rfd::FileDialog::new()
-            .add_filter("Comics", &["zip", "cbz", "rar", "cbr", "7z", "cb7"])
-            .pick_file();
-        if let Some(path) = picked {
+        let mut dialog =
+            rfd::FileDialog::new().add_filter("Comics", &["zip", "cbz", "rar", "cbr", "7z", "cb7"]);
+        if !self.settings.last_directory.is_empty() {
+            dialog = dialog.set_directory(&self.settings.last_directory);
+        }
+        if let Some(path) = dialog.pick_file() {
+            if let Some(parent) = path.parent() {
+                self.settings.last_directory = parent.to_string_lossy().into_owned();
+            }
             let path = path.to_string_lossy().into_owned();
             if let Err(error) = self.open_book(&path) {
                 self.show_error(error.to_string());
@@ -656,6 +684,15 @@ impl App {
         self.book.as_ref().map_or(0, |book| book.pages.len())
     }
 
+    /// Name of a page in book order, if the index is valid.
+    pub fn page_name(&self, page: usize) -> Option<&str> {
+        self.book
+            .as_ref()?
+            .pages
+            .get(page)
+            .map(|entry| entry.name.as_str())
+    }
+
     /// Returns a reference to the decoded natural-size image for a page.
     ///
     /// Used by the thumbnail browser to generate small previews.
@@ -678,6 +715,7 @@ impl App {
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
+        self.remember_current_page();
     }
 
     /// Returns a cached thumbnail, queueing a background decode on a miss.
@@ -1004,6 +1042,34 @@ impl App {
                     self.set_fit_only_oversize(fit_only);
                 }
                 ui.separator();
+                ui.heading("Pages");
+                ui.horizontal(|ui| {
+                    ui.label("Filter:");
+                    let mut filter = self.settings.filter;
+                    eframe::egui::ComboBox::from_id_salt("settings-filter")
+                        .selected_text(filter_name(filter))
+                        .show_ui(ui, |ui| {
+                            for candidate in [
+                                Filter::Box,
+                                Filter::Bilinear,
+                                Filter::Bicubic,
+                                Filter::BSpline,
+                                Filter::CatmullRom,
+                                Filter::Lanczos3,
+                            ] {
+                                ui.selectable_value(&mut filter, candidate, filter_name(candidate));
+                            }
+                        });
+                    if filter != self.settings.filter {
+                        self.set_filter(filter);
+                    }
+                });
+                ui.checkbox(
+                    &mut self.settings.natural_sort,
+                    "Natural page order (applies on next open)",
+                );
+                ui.checkbox(&mut self.settings.remember_page, "Remember the last page");
+                ui.separator();
                 ui.heading("Interface");
                 ui.checkbox(&mut self.settings.toolbar_visible, "Toolbar (T)");
                 ui.checkbox(&mut self.settings.browser_visible, "Page browser (B)");
@@ -1011,6 +1077,44 @@ impl App {
         if !open {
             self.settings_open = false;
         }
+    }
+
+    /// Stores the current page for `remember_page`.
+    ///
+    /// The per-book map is bounded so a reader who opens thousands of books
+    /// does not grow the settings file without limit.
+    fn remember_current_page(&mut self) {
+        if !self.settings.remember_page || self.book_key.is_empty() {
+            return;
+        }
+        let Some(page) = self.current_page() else {
+            return;
+        };
+        self.settings.last_pages.insert(self.book_key.clone(), page);
+        while self.settings.last_pages.len() > MAX_REMEMBERED_BOOKS {
+            let Some(oldest) = self.settings.last_pages.keys().next().cloned() else {
+                break;
+            };
+            self.settings.last_pages.remove(&oldest);
+        }
+    }
+
+    /// Selects the resampling filter used for scaled pages.
+    ///
+    /// Cached textures are keyed by filter, so clearing them makes the next
+    /// frame decode with the new filter instead of showing stale pixels.
+    pub fn set_filter(&mut self, filter: Filter) {
+        if self.settings.filter == filter {
+            return;
+        }
+        self.settings.filter = filter;
+        if let Some(book) = self.book.as_mut() {
+            book.filter = filter;
+            book.textures.clear();
+            book.pending.clear();
+            book.cancel_pending();
+        }
+        self.sync_settings();
     }
 
     /// Toggle thumbnail browser visibility.
@@ -1031,6 +1135,7 @@ impl App {
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
+        self.remember_current_page();
     }
 
     /// Moves to the previous spread.
@@ -1040,6 +1145,7 @@ impl App {
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
+        self.remember_current_page();
     }
 
     /// Moves forward by one page.
@@ -1049,6 +1155,7 @@ impl App {
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
+        self.remember_current_page();
     }
 
     /// Moves backward by one page.
@@ -1058,6 +1165,7 @@ impl App {
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
+        self.remember_current_page();
     }
 
     /// Moves to the first spread.
@@ -1067,6 +1175,7 @@ impl App {
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
+        self.remember_current_page();
     }
 
     /// Moves to the last spread.
@@ -1076,6 +1185,7 @@ impl App {
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
+        self.remember_current_page();
     }
 
     /// Switches between one-page and two-page layout.
@@ -1178,9 +1288,33 @@ impl eframe::App for App {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.remember_current_page();
         self.sync_settings();
         self.settings.save();
     }
+}
+
+/// Human-readable name for a resampling filter.
+fn filter_name(filter: Filter) -> &'static str {
+    match filter {
+        Filter::Box => "Box",
+        Filter::Bilinear => "Bilinear",
+        Filter::Bicubic => "Bicubic (Mitchell)",
+        Filter::BSpline => "B-spline",
+        Filter::CatmullRom => "Catmull-Rom",
+        Filter::Lanczos3 => "Lanczos3",
+    }
+}
+
+/// Stable identity for a book path.
+///
+/// Canonicalizing collapses relative paths and symlinks so the same book maps
+/// to one entry. Falls back to the path as given when the filesystem cannot
+/// resolve it.
+fn book_key(path: &str) -> String {
+    std::fs::canonicalize(path)
+        .map(|canonical| canonical.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.to_owned())
 }
 
 fn cache_capacity() -> NonZeroUsize {

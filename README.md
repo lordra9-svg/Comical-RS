@@ -16,7 +16,9 @@ If you encounter forbidden material, stop and report it.
 
 M6 infrastructure slice in progress. The viewer opens ZIP, RAR, 7z and directory
 books with one- and two-page spreads, zoom modes, keyboard navigation, drag pan,
-fullscreen, toolbar, thumbnails, rotation, RTL, and persistent settings.
+wheel pan, Ctrl+wheel zoom, fullscreen, toolbar, thumbnails, rotation, RTL,
+selectable resampling filters, optional natural page order, remembered last page
+and persistent settings.
 `comical-cli` lists and extracts pages. Cross-platform CI runs on Windows,
 macOS and Linux. A real-writer archive corpus under `tests/corpus/` covers
 Info-ZIP and 7-Zip fixtures (list and exact-byte extract). Packaging and release
@@ -41,7 +43,9 @@ cargo run -p comical-cli -- extract target/fixtures/sample.cbz 0 target/page.bin
 ```
 
 Pass `--password <value>` for encrypted ZIP AES-256, RAR data or headers, and
-7z AES-256 archives. Passwords are never written to disk.
+7z AES-256 archives. Passwords are never written to disk. Pass `--natural-sort`
+to `probe` or `extract` to order digit runs numerically (`page2` before
+`page10`); without it book order is byte order, per the behavior spec.
 
 ## Layout
 

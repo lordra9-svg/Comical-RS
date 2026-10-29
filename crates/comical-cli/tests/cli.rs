@@ -309,3 +309,44 @@ fn output_path_that_cannot_be_written_reports_an_error() {
     assert!(stderr(&output).contains("cannot write"));
     assert!(!missing_parent.exists());
 }
+
+#[test]
+fn probe_sorts_by_bytes_unless_natural_sort_is_requested() {
+    let directory = TempDir::new().unwrap();
+    let path = directory.path().join("book.cbz");
+    write_zip(
+        &path,
+        &[
+            FixtureEntry::new("page10.png", PAGE_A),
+            FixtureEntry::new("page2.png", PAGE_B),
+            FixtureEntry::new("page1.png", PAGE_A),
+        ],
+        ZipMethod::Store,
+        ZipEncryption::None,
+        None,
+    )
+    .unwrap();
+    let book = path.to_str().unwrap();
+
+    let byte_order = run(&["probe", book]);
+    assert!(byte_order.status.success(), "{}", stderr(&byte_order));
+    assert_eq!(
+        stdout(&byte_order),
+        entry_lines(&[
+            ("page1.png", PAGE_A),
+            ("page10.png", PAGE_A),
+            ("page2.png", PAGE_B)
+        ])
+    );
+
+    let natural_order = run(&["probe", "--natural-sort", book]);
+    assert!(natural_order.status.success(), "{}", stderr(&natural_order));
+    assert_eq!(
+        stdout(&natural_order),
+        entry_lines(&[
+            ("page1.png", PAGE_A),
+            ("page2.png", PAGE_B),
+            ("page10.png", PAGE_A)
+        ])
+    );
+}

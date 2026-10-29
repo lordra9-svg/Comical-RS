@@ -39,10 +39,10 @@ Open implementation choices:
 
 Testing:
 
-- `tests/vectors/images.json` is empty. Fill it with input hashes, filter,
-  target size and output hashes.
-- Add unit tests for each filter on small synthetic pixels.
-- Add decode tests for each format.
+- `tests/vectors/images.json` holds 42 oracle-confirmed cases (six filters,
+  seven target sizes) and is checked byte for byte on every platform.
+- Unit tests cover `sin_pi`/`sinc` and the arithmetic-only Lanczos kernel.
+- Decode tests cover every supported format.
 - Add a golden test for rotation and for alpha handling.
 - Keep image tests outside the core crate.
 
@@ -74,11 +74,20 @@ Shipped after M4 (see `docs/app.md`):
 5. Toolbar and thumbnail browser.
 6. Persistent settings.
 
+Shipped after M4, second slice:
+
+1. Wheel scroll and Ctrl+wheel zoom.
+2. `natural_sort`, `remember_page` and `filter` settings wired through the
+   viewer, the archive layer and the CLI (`--natural-sort`).
+3. Drift-free golden image vectors on macOS arm64 (arithmetic `sin` in the
+   Lanczos kernel).
+
 Still open for later milestones:
 
-1. Context menu, wheel and Ctrl+wheel input.
-2. Password prompt UI and last-page memory.
-3. Manual acceptance checklist on macOS and Linux.
+1. Context menu.
+2. Password prompt UI.
+3. Byte-budgeted caches driven by `cache_bytes` and `resample_bytes`.
+4. Manual acceptance checklist on macOS and Linux.
 
 Toolkit decision: eframe/egui with the `wgpu` backend, `rfd` for the file
 dialog, `lru` for the two caches.
@@ -139,11 +148,11 @@ the UI and image pipeline are stable.
 | Decision | Current state | Impact |
 |---|---|---|
 | UI toolkit | `eframe`/`egui` with `wgpu`, `rfd` dialog | `comical-app` |
-| Natural sort | Off, byte sort only | archive ordering |
-| EXIF orientation | Not decided | image pipeline |
+| Natural sort | Opt-in setting; byte order is still the default | archive ordering |
+| EXIF orientation | Parsed setting, not applied yet | image pipeline |
 | WebP / AVIF | Not in v1 | filter and decoder |
 | Animated GIF | Not decided | image pipeline |
-| Last-page memory | Not decided | settings |
+| Last-page memory | Implemented behind `remember_page` | settings |
 | Product name | Undecided | packaging |
 | Independent clean-room reviewer | Not named | release |
 | Legal review | Not started | release |

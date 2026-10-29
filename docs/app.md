@@ -18,7 +18,7 @@ toolbar, thumbnail browser, per-page rotation, RTL, and persistent settings.
 | `src/view.rs` | Canvas drawing, content geometry, pan clamping, placeholder text |
 | `src/nav.rs` | Keyboard map |
 | `src/error.rs` | `AppError` |
-| `tests/open_book.rs` | Opens a real directory book and checks page 0 decodes |
+| `tests/open_book.rs` | Opens real directory books: natural size, sort order, remembered page, filter |
 
 ## State
 
@@ -33,6 +33,8 @@ App
   fullscreen: bool
   error: Option<String>                book-level error, drawn in the canvas
   title, title_dirty
+  settings: Settings                   persisted TOML, see below
+  book_key: String                     canonical path, used by remember_page
 
 OpenedBook
   pages: Vec<PageEntry>
@@ -42,11 +44,13 @@ OpenedBook
   natural: LruCache<usize, RgbImage>   decoded full pages, capacity 10
   textures: LruCache<TextureKey, TextureHandle>
                                        uploaded, resized, capacity 10
+  filter: Filter                       resampling filter for scaled pages
 ```
 
-`TextureKey` is `(page, part, width, height)` and is `Copy`. A hit costs no
+`TextureKey` is `(page, part, rotation, filter)` and is `Copy`. A hit costs no
 archive read, no decode, no resample and no upload, which is what keeps drag
-panning inside the frame budget.
+panning inside the frame budget. Because the filter is part of the key,
+changing it never shows pixels from the previous filter.
 
 Opening a book replaces `OpenedBook` only after the archive opens, so a failed
 open leaves the previous book on screen with the error drawn over it.
@@ -116,7 +120,37 @@ draw scrollbars; it pans instead. See the divergences below.
 | 0 | Custom 100% |
 | F11 | Fullscreen |
 
+Wheel scroll pans the content; Ctrl+wheel steps the custom zoom by 10 points.
 Left drag pans. Pan resets on every page, view-mode and zoom change.
+
+## Settings that change behavior
+
+`src/settings.rs` persists a versioned TOML file in the platform config
+directory. These keys are read at startup and written on exit:
+
+| Key | Effect |
+|---|---|
+| `zoom`, `zoom_percent`, `fit_only_oversize`, `mode`, `direction` | Initial view state |
+| `toolbar_visible`, `browser_visible` | Panel visibility |
+| `filter` | Resampling filter for scaled pages; picked in the settings window |
+| `natural_sort` | Numeric-aware page order, applied on the next open |
+| `remember_page` | Reopen a book on the page that was last shown |
+| `last_directory` | Initial directory for the open dialog |
+| `last_pages` | Per-book page map backing `remember_page`, capped at 200 books |
+| `window_width`, `window_height`, `window_x`, `window_y` | Initial window geometry |
+
+`last_pages` is an implementation key, not part of the behavior spec table: the
+spec names the `remember_page` switch but not its storage. It is bounded so the
+file cannot grow without limit, and books are keyed by canonical path so a
+relative path, an absolute path and a symlink share one entry.
+
+The settings window (`S`) exposes direction, layout, zoom, fit-only, filter,
+natural sort, remember page and panel visibility. Changing the filter clears the
+texture cache so the next frame decodes with the new kernel.
+
+`cache_bytes` and `resample_bytes` are parsed and persisted but do not yet drive
+the caches, which are counted in pages. That gap is tracked in
+`docs/roadmap.md`.
 
 ## Toolbar (`toolbar.rs`)
 
@@ -151,15 +185,15 @@ changing either side.
 | Scrollbar thickness reserved when content overflows | `scrollbar = 0`; content pans with no reserved thickness | No scrollbars are drawn yet |
 
 | Alt+Enter, Alt+O, Alt+X, F1 | F11 only | M4 scope |
-| Wheel scroll, Ctrl+wheel zoom, context menu | Not implemented | Later milestones |
+| Context menu | Not implemented | Later milestone |
 
 ## Tests
 
 - `app.rs` unit tests: defaults, navigation and pan reset, view-mode and zoom
   sync, percent clamping, orientation rebuild, split size, half cropping.
 - `view.rs` unit tests: two-page centering, pan clamping.
-- `tests/open_book.rs`: writes a real PNG into a temp directory, opens it as a
-  book, checks the page count and that page 0 decodes at its natural size.
+- `tests/open_book.rs`: opens real directory books and checks natural size,
+  byte order versus `natural_sort`, `remember_page` restore, and filter storage.
 
 Not covered by automated tests: window creation, keyboard and pointer events,
 fullscreen, and the native file dialog. Those are on the manual checklist.

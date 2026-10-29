@@ -45,7 +45,7 @@ pub(crate) fn open(
         });
     }
 
-    let (pages, sources) = select_pages(candidates);
+    let (pages, sources) = select_pages(candidates, options.natural_sort);
     if let Some(error) = page_count_error(&pages) {
         return Err(error);
     }

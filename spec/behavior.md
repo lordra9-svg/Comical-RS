@@ -48,6 +48,8 @@ Ignore directories and other files. Include entries in subdirectories; use the f
 
 Sort the included full names by byte value, ascending. This is not a natural or numeric sort. For example, `page10.png` sorts before `page2.png`.
 
+When the `natural_sort` setting (section 10) is enabled, compare runs of ASCII digits by numeric value instead: `page2.png` sorts before `page10.png`. Runs of equal value order by run length, shorter first (`2.png` before `02.png`). Text outside a digit run still compares by byte value, so natural order only moves names that differ inside a number.
+
 An empty page list is an error: "This archive does not contain any pages."
 
 ### 3.4 Duplicate names
@@ -376,6 +378,8 @@ Persist in a versioned TOML file in the platform config directory. Write atomica
 | natural_sort | boolean | false |
 | exif_orientation | boolean | false |
 | remember_page | boolean | false |
+
+`remember_page` stores the last page per book. The storage format is implementation-private; it must be bounded so the settings file cannot grow without limit.
 
 Optional one-time migration from old Comical settings is allowed, but the new app must start with its own defaults if migration is declined.
 

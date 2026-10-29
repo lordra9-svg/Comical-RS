@@ -189,13 +189,66 @@ fn bspline(x: f64) -> f64 {
     }
 }
 
+/// `sinc(x) = sin(PI * x) / (PI * x)`, with `sinc(0) = 1`.
 fn sinc(x: f64) -> f64 {
-    if x == 0.0 {
-        1.0
-    } else {
-        let value = PI * x;
-        value.sin() / value
+    if x == 0.0 { 1.0 } else { sin_pi(x) / (PI * x) }
+}
+
+/// `sin(PI * x)` built from arithmetic only.
+///
+/// `f64::sin` is the platform libm. glibc, the MSVC UCRT and Apple's libm
+/// disagree in the last bit for some arguments, and the Lanczos kernel turns
+/// those values into `f32` weights: one flipped weight is enough to change an
+/// output byte, which breaks the golden vectors on Apple silicon. Range
+/// reduction plus Taylor polynomials keep the same bits on every target.
+///
+/// The input domain is small (`|x| < 3` for the Lanczos support), so a
+/// Cody-Waite reduction by `PI/2` followed by a quadrant selection covers it
+/// without the multi-word reduction a general `sin` needs.
+fn sin_pi(x: f64) -> f64 {
+    // Reduce `t = PI * x` to `r` in `[-PI/4, PI/4]` and a quadrant `k`.
+    let t = PI * x;
+    let quadrant = (t * (2.0 / PI)).round();
+    // Split so `quadrant * PIO2_HI` is exact for the small quadrants here.
+    const PIO2_HI: f64 = f64::from_bits(0x3FF9_21FB_5440_0000);
+    const PIO2_LO: f64 = 6.077_100_506_506_192e-11;
+    let r = (t - quadrant * PIO2_HI) - quadrant * PIO2_LO;
+
+    let (sin_r, cos_r) = (sin_series(r), cos_series(r));
+    match (quadrant as i64).rem_euclid(4) {
+        0 => sin_r,
+        1 => cos_r,
+        2 => -sin_r,
+        _ => -cos_r,
     }
+}
+
+/// Taylor series for `sin` on `|r| <= PI/4`, through `r^17`.
+fn sin_series(r: f64) -> f64 {
+    let r2 = r * r;
+    r * (1.0
+        + r2 * (-1.0 / 6.0
+            + r2 * (1.0 / 120.0
+                + r2 * (-1.0 / 5040.0
+                    + r2 * (1.0 / 362_880.0
+                        + r2 * (-1.0 / 39_916_800.0
+                            + r2 * (1.0 / 6_227_020_800.0
+                                + r2 * (-1.0 / 1_307_674_368_000.0
+                                    + r2 * (1.0 / 355_687_428_096_000.0)))))))))
+}
+
+/// Taylor series for `cos` on `|r| <= PI/4`, through `r^16`.
+fn cos_series(r: f64) -> f64 {
+    let r2 = r * r;
+    1.0 + r2
+        * (-1.0 / 2.0
+            + r2 * (1.0 / 24.0
+                + r2 * (-1.0 / 720.0
+                    + r2 * (1.0 / 40_320.0
+                        + r2 * (-1.0 / 3_628_800.0
+                            + r2 * (1.0 / 479_001_600.0
+                                + r2 * (-1.0 / 87_178_291_200.0
+                                    + r2 * (1.0 / 20_922_789_888_000.0))))))))
 }
 
 /// One destination sample's source window and normalized weights.
@@ -344,4 +397,49 @@ pub fn resize(
         height,
         pixels,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Maximum distance between the arithmetic `sin_pi` and the platform libm.
+    ///
+    /// The kernel only needs the `f32` weights to agree, so a few ULPs of
+    /// `f64` slack is expected and harmless. A larger gap would mean the
+    /// reduction or the polynomials are wrong.
+    const SIN_TOLERANCE: f64 = 1e-15;
+
+    #[test]
+    fn sinc_is_one_at_zero() {
+        assert_eq!(sinc(0.0), 1.0);
+    }
+
+    #[test]
+    fn sin_pi_tracks_libm_across_the_lanczos_support() {
+        let mut x = -3.0_f64;
+        while x <= 3.0 {
+            let expected = (PI * x).sin();
+            let actual = sin_pi(x);
+            assert!(
+                (expected - actual).abs() <= SIN_TOLERANCE,
+                "sin_pi({x}) = {actual}, libm = {expected}"
+            );
+            x += 0.03125;
+        }
+    }
+
+    #[test]
+    fn sinc_vanishes_at_integers() {
+        for x in [1.0_f64, 2.0, 3.0, -1.0, -2.0, -3.0] {
+            assert!(sinc(x).abs() < 1e-15, "sinc({x}) = {}", sinc(x));
+        }
+    }
+
+    #[test]
+    fn sinc_is_symmetric() {
+        for x in [0.1_f64, 0.5, 1.3, 2.0, 2.9] {
+            assert_eq!(sinc(x), sinc(-x), "sinc({x})");
+        }
+    }
 }

@@ -7,14 +7,17 @@ use std::path::{Path, PathBuf};
 use comical_core::PageEntry;
 
 use crate::{
-    ArchiveError, ArchiveFormat, Candidate, ComicArchive, check_declared_size, check_index,
-    is_image_name, page_count_error, select_pages,
+    ArchiveError, ArchiveFormat, Candidate, ComicArchive, OpenOptions, check_declared_size,
+    check_index, is_image_name, page_count_error, select_pages,
 };
 
-pub(crate) fn open(root: &Path) -> Result<Box<dyn ComicArchive>, ArchiveError> {
+pub(crate) fn open(
+    root: &Path,
+    options: &OpenOptions<'_>,
+) -> Result<Box<dyn ComicArchive>, ArchiveError> {
     let mut candidates = Vec::new();
     walk(root, Path::new(""), &mut candidates)?;
-    let (pages, sources) = select_pages(candidates);
+    let (pages, sources) = select_pages(candidates, options.natural_sort);
     if let Some(error) = page_count_error(&pages) {
         return Err(error);
     }

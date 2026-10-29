@@ -19,13 +19,16 @@ pub trait ComicArchive: Send {
 pub struct OpenOptions<'a> {
     pub password: Option<&'a str>,
     pub max_entry_bytes: u64,
+    pub natural_sort: bool,
 }
 ```
 
 Entry points:
 
 - `open(path)`: default options, no password, 512 MiB entry cap.
-- `open_with_options(path, options)`: explicit password and cap.
+- `open_with_options(path, options)`: explicit password, cap and sort order.
+- `OpenOptions::with_natural_sort(bool)`: numeric-aware ordering, off by
+  default.
 - `format_for(path)`: extension to `ArchiveFormat`, without opening.
 - `DEFAULT_MAX_ENTRY_BYTES`: 512 MiB.
 
@@ -39,14 +42,22 @@ Entry points:
 3. Unknown extension -> `ArchiveError::CannotOpen`.
 4. The reader enumerates entries and creates a `Candidate` for each image:
    `{ name, size, source }`.
-5. `select_pages` stable-sorts candidates by the byte value of `name`.
+5. `select_pages` stable-sorts candidates by the byte value of `name`, or by
+   natural order when `OpenOptions::natural_sort` is on.
 6. It splits the result into the public `Vec<PageEntry>` and a private
    `Vec<Source>`.
 7. Empty page list -> `ArchiveError::NoPages`.
 8. The reader is boxed as `ComicArchive`.
 
-The sort is not natural sort and not locale-aware. `page10` sorts before
-`page2`. The sort is stable, so duplicate names keep archive order.
+The default sort is not natural sort and not locale-aware: `page10` sorts
+before `page2`. The sort is stable, so duplicate names keep archive order.
+
+With `natural_sort` on, runs of ASCII digits compare by numeric value, so
+`page2` sorts before `page10`. Everything outside a digit run still compares by
+byte value, which makes natural order a strict refinement of the default: only
+names that differ inside a number can move. Equal values order by run length
+(`2` before `02`), so the comparator is total. The viewer exposes this as the
+`natural_sort` setting; the CLI exposes it as `--natural-sort`.
 
 ## Page filter
 
@@ -318,7 +329,7 @@ interoperability with every real-world writer. A real corpus is still required.
 - Multi-volume 7z is not supported.
 - No archive writing.
 - No recovery or repair.
-- No natural sort.
+- Natural sort is opt-in; the spec default stays byte order.
 - No page count limit.
 - No zeroization of stored passwords.
 - 7z reads reopen the file per page.
