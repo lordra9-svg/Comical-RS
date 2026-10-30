@@ -74,6 +74,8 @@ pub enum ViewMode {
     OnePage,
     /// One or two pages at a time, using spread rules.
     TwoPage,
+    /// Continuous vertical scroll through all pages (webtoon mode).
+    Webtoon,
 }
 
 /// Errors from constructing a spread machine.
@@ -189,7 +191,9 @@ impl SpreadState {
     /// Advances by one spread.
     pub fn next_turn(&mut self) {
         self.spread = match self.mode {
-            ViewMode::OnePage => one_page_spread(next_page(self.current_page(), self.pages.len())),
+            ViewMode::OnePage | ViewMode::Webtoon => {
+                one_page_spread(next_page(self.current_page(), self.pages.len()))
+            }
             ViewMode::TwoPage => self.next_turn_two_page(),
         };
     }
@@ -197,7 +201,9 @@ impl SpreadState {
     /// Retreats by one spread.
     pub fn prev_turn(&mut self) {
         self.spread = match self.mode {
-            ViewMode::OnePage => one_page_spread(previous_page(self.current_page())),
+            ViewMode::OnePage | ViewMode::Webtoon => {
+                one_page_spread(previous_page(self.current_page()))
+            }
             ViewMode::TwoPage => self.prev_turn_two_page(),
         };
     }
@@ -205,7 +211,9 @@ impl SpreadState {
     /// Moves forward by one page.
     pub fn next_page(&mut self) {
         self.spread = match self.mode {
-            ViewMode::OnePage => one_page_spread(next_page(self.current_page(), self.pages.len())),
+            ViewMode::OnePage | ViewMode::Webtoon => {
+                one_page_spread(next_page(self.current_page(), self.pages.len()))
+            }
             ViewMode::TwoPage => self.next_page_two_page(),
         };
     }
@@ -213,7 +221,9 @@ impl SpreadState {
     /// Moves backward by one page.
     pub fn prev_page(&mut self) {
         self.spread = match self.mode {
-            ViewMode::OnePage => one_page_spread(previous_page(self.current_page())),
+            ViewMode::OnePage | ViewMode::Webtoon => {
+                one_page_spread(previous_page(self.current_page()))
+            }
             ViewMode::TwoPage => self.prev_page_two_page(),
         };
     }
@@ -223,7 +233,7 @@ impl SpreadState {
         let last = self.pages.len() - 1;
         let page = page.min(last);
         self.spread = match self.mode {
-            ViewMode::OnePage => one_page_spread(page),
+            ViewMode::OnePage | ViewMode::Webtoon => one_page_spread(page),
             ViewMode::TwoPage if page == 0 => first_spread(&self.pages, ViewMode::TwoPage),
             ViewMode::TwoPage if page == last => last_spread(&self.pages, ViewMode::TwoPage),
             ViewMode::TwoPage => start_spread(&self.pages, page),
@@ -239,18 +249,19 @@ impl SpreadState {
         let last = self.pages.len() - 1;
         self.mode = mode;
         self.spread = match mode {
-            ViewMode::OnePage => one_page_spread(page),
+            ViewMode::OnePage | ViewMode::Webtoon => one_page_spread(page),
             ViewMode::TwoPage if page == 0 => first_spread(&self.pages, ViewMode::TwoPage),
             ViewMode::TwoPage if page == last => last_spread(&self.pages, ViewMode::TwoPage),
             ViewMode::TwoPage => start_spread(&self.pages, page),
         };
     }
 
-    /// Switches between one-page and two-page mode.
+    /// Cycles through one-page, two-page and webtoon modes.
     pub fn toggle_mode(&mut self) {
         self.set_mode(match self.mode {
             ViewMode::OnePage => ViewMode::TwoPage,
-            ViewMode::TwoPage => ViewMode::OnePage,
+            ViewMode::TwoPage => ViewMode::Webtoon,
+            ViewMode::Webtoon => ViewMode::OnePage,
         });
     }
 

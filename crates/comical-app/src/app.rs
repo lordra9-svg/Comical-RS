@@ -1156,6 +1156,7 @@ impl App {
                     let mut mode = self.zoom.mode;
                     ui.radio_value(&mut mode, ViewMode::OnePage, "One page");
                     ui.radio_value(&mut mode, ViewMode::TwoPage, "Two pages");
+                    ui.radio_value(&mut mode, ViewMode::Webtoon, "Webtoon");
                     if mode != self.zoom.mode {
                         self.set_view_mode(mode);
                     }

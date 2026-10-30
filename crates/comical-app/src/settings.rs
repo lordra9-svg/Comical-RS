@@ -325,6 +325,7 @@ mod view_mode_serde {
         let s = match value {
             ViewMode::OnePage => "one_page",
             ViewMode::TwoPage => "two_page",
+            ViewMode::Webtoon => "webtoon",
         };
         serializer.serialize_str(s)
     }
@@ -337,6 +338,7 @@ mod view_mode_serde {
         match s.as_str() {
             "one_page" => Ok(ViewMode::OnePage),
             "two_page" => Ok(ViewMode::TwoPage),
+            "webtoon" => Ok(ViewMode::Webtoon),
             _ => Ok(ViewMode::TwoPage),
         }
     }
