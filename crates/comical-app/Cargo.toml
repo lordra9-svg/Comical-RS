@@ -26,6 +26,24 @@ comical-image = { path = "../comical-image" }
 crossbeam-channel = "0.5"
 rayon = "1"
 
+[package.metadata.deb]
+maintainer = "Comical-RS Contributors"
+copyright = "2024–2026 Comical-RS Contributors"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+Comical is a desktop comic book reader supporting CBZ, CBR and 7z archives.
+Features include one-page, two-page and webtoon view modes, EXIF orientation,
+per-page rotation, RTL reading, byte-budgeted caches, parallel prefetch and
+persistent settings."""
+depends = "$auto"
+section = "graphics"
+priority = "optional"
+assets = [
+    ["target/release/comical", "usr/bin/", "755"],
+    ["../../CHANGELOG.md", "usr/share/doc/comical/", "644"],
+    ["../../README.md", "usr/share/doc/comical/", "644"],
+]
+
 [dev-dependencies]
 tempfile = "3"
 xtask = { path = "../../xtask" }

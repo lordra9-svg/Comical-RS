@@ -20,7 +20,7 @@ planned item as a contract until it has tests and a spec section.
 | M10 WebP/AVIF decode | Done | `comical-image/Cargo.toml` (image features) |
 | M11 fuzz targets | Done | `fuzz/fuzz_targets/` (archive, decode, navigation) |
 | Real archive corpus | In progress | `tests/corpus/` Info-ZIP + 7-Zip; RAR writer samples open |
-| M12 packaging | In progress | release scripts scaffolded; installers pending |
+| M12 packaging | Done (scaffolding) | `scripts/release.sh`, `CHANGELOG.md`, cargo-deb metadata; installers/signing/legal pending |
 
 ## M3: image pipeline
 
