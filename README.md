@@ -56,13 +56,6 @@ xtask/                 synthetic archive fixture generator
 Implementation details, file ownership and the maintenance runbook start at
 `docs/README.md`.
 
-## Toolchain
-
-- Rust 1.99.1 with the GNU host is installed.
-- Add `%USERPROFILE%\.cargo\bin` to `PATH` in a new shell if `cargo` is not found.
-- CMake and Ninja are optional.
-- `cargo-nextest`, `cargo-deny`, `cargo-fuzz` are optional.
-
 ## Milestones
 
 1. ~~Scaffold the Cargo workspace.~~
