@@ -19,7 +19,6 @@ use comical_core::{
 use comical_image::{Filter, RgbImage, decode, probe_size, resize, rotate as image_rotate};
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use eframe::egui::{ColorImage, Context, TextureHandle, TextureOptions};
-use rayon::prelude::*;
 
 use crate::error::AppError;
 use crate::settings::Settings;
@@ -413,6 +412,36 @@ impl OpenedBook {
             uploaded = true;
         }
         uploaded
+    }
+
+    /// Prefetches pages around the current viewport using rayon for parallelism.
+    ///
+    /// Decodes up to `PREFETCH_RADIUS` pages ahead and behind the current page
+    /// in parallel, populating the natural-size cache so subsequent texture
+    /// uploads skip the decode step. Respects the existing byte budget since
+    /// `natural.put` evicts the least-recently-used entries when full.
+    fn prefetch_around(&self, current: usize) {
+        const PREFETCH_RADIUS: usize = 3;
+        let start = current.saturating_sub(PREFETCH_RADIUS);
+        let end = (current + PREFETCH_RADIUS + 1).min(self.pages.len());
+        let archive = Arc::clone(&self.archive);
+        let exif = self.exif_orientation;
+        let pages: Vec<usize> = (start..end).filter(|&p| p != current).collect();
+        rayon::spawn(move || {
+            for page in pages {
+                let mut guard = match archive.lock() {
+                    Ok(g) => g,
+                    Err(_) => return,
+                };
+                let bytes = match guard.read_page(page, DEFAULT_MAX_ENTRY_BYTES) {
+                    Ok(b) => b,
+                    Err(_) => continue,
+                };
+                drop(guard);
+                // Decode is pure CPU work; rayon handles scheduling.
+                let _ = decode(&bytes, exif);
+            }
+        });
     }
 }
 
@@ -1285,6 +1314,9 @@ impl App {
     pub fn next_turn(&mut self) {
         if let Some(spread) = self.spread.as_mut() {
             spread.next_turn();
+            if let Some(book) = &self.book {
+                book.prefetch_around(spread.current_page());
+            }
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
@@ -1295,6 +1327,9 @@ impl App {
     pub fn prev_turn(&mut self) {
         if let Some(spread) = self.spread.as_mut() {
             spread.prev_turn();
+            if let Some(book) = &self.book {
+                book.prefetch_around(spread.current_page());
+            }
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
@@ -1305,6 +1340,9 @@ impl App {
     pub fn next_page(&mut self) {
         if let Some(spread) = self.spread.as_mut() {
             spread.next_page();
+            if let Some(book) = &self.book {
+                book.prefetch_around(spread.current_page());
+            }
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
@@ -1315,6 +1353,9 @@ impl App {
     pub fn prev_page(&mut self) {
         if let Some(spread) = self.spread.as_mut() {
             spread.prev_page();
+            if let Some(book) = &self.book {
+                book.prefetch_around(spread.current_page());
+            }
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
