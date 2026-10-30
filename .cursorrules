@@ -1,0 +1,47 @@
+# Cursor Rules for Comical-RS
+
+## Project context
+- Rust workspace with 5 crates: comical-core, comical-archive, comical-image, comical-app, comical-cli
+- Desktop comic reader using eframe/egui + wgpu backend
+- Pure-Rust archive support (ZIP, RAR, 7z) — no system dependencies
+- Clean-room development: every commit must carry `Clean-Room: spec-v1` trailer
+
+## Coding style
+- Edition 2024, resolver v3
+- Run `cargo fmt --all` before committing
+- Run `cargo clippy --all-targets -- -D warnings` — zero warnings policy
+- Use `thiserror` for public error types; never panic on malformed input
+- Document every `pub` item with doc comments
+- Prefer builder patterns over positional arguments for >3 parameters
+- Pin dependency versions; no wildcards
+
+## Architecture constraints
+- Read ARCHITECTURE.md at the start of every session
+- comical-core is pure logic only — no I/O, no allocation beyond page lists
+- comical-archive handles all archive formats behind a trait interface
+- comical-image handles decode, probe, EXIF, resample, rotate
+- comical-app owns UI state, caches, background workers
+- Byte-budgeted LRU caches — respect cache_bytes and resample_bytes limits
+- Background workers use crossbeam channels; rayon for CPU prefetch only
+
+## Testing requirements
+- Every new feature needs unit tests
+- Image pipeline changes need golden vector updates in tests/vectors/
+- Archive changes need corpus entries in tests/corpus/
+- Run `cargo test --all` before committing
+- Fuzz targets live in fuzz/ (excluded from workspace, nightly-only)
+
+## Commit discipline
+- Conventional Commits format: type(scope): description
+- Every commit MUST include `Clean-Room: spec-v1` trailer
+- Do not copy code from GPL/LGPL projects
+- Do not reverse-engineer proprietary codecs
+- Update docs/roadmap.md status table when completing milestones
+
+## What NOT to do
+- Do not add C/system dependencies without justification
+- Do not use unsafe unless absolutely necessary (document why)
+- Do not change the crate boundary responsibilities without updating ARCHITECTURE.md
+- Do not remove or weaken existing tests
+- Do not introduce unbounded allocations or memory leaks
+- Do not default to purple/indigo/violet color palettes in UI code
