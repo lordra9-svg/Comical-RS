@@ -132,6 +132,8 @@ struct OpenedBook {
     thumb_rx: Receiver<ThumbResult>,
     /// Resampling filter for pages that have to be scaled.
     filter: Filter,
+    /// Whether to apply EXIF orientation when probing and decoding pages.
+    exif_orientation: bool,
     /// Set when a background decode reported an encrypted entry that still
     /// needs a password.
     password_required: bool,
@@ -143,6 +145,7 @@ impl OpenedBook {
         filter: Filter,
         cache_bytes: u64,
         resample_bytes: u64,
+        exif_orientation: bool,
     ) -> Self {
         let pages = archive.pages().to_vec();
         let count = pages.len();
@@ -203,6 +206,7 @@ impl OpenedBook {
             thumb_tx,
             thumb_rx,
             filter,
+            exif_orientation,
             password_required: false,
         }
     }
@@ -224,7 +228,7 @@ impl OpenedBook {
         }
 
         let bytes = self.read_page_bytes(page)?;
-        let (width, height) = match probe_size(&bytes) {
+        let (width, height) = match probe_size(&bytes, self.exif_orientation) {
             Ok(size) => size,
             Err(error) => {
                 let message = error.to_string();
@@ -280,7 +284,7 @@ impl OpenedBook {
         }
 
         let bytes = self.read_page_bytes(page)?;
-        let image = match decode(&bytes) {
+        let image = match decode(&bytes, self.exif_orientation) {
             Ok(image) => image,
             Err(error) => {
                 let message = error.to_string();
@@ -437,7 +441,7 @@ fn decode_request(
         }
     };
 
-    let decoded = match decode(&bytes) {
+    let decoded = match decode(&bytes, false) {
         Ok(image) => image,
         Err(_) => return placeholder_result(req, name, false),
     };
@@ -514,7 +518,7 @@ fn decode_thumbnail(
             };
         }
     };
-    let decoded = match decode(&bytes) {
+    let decoded = match decode(&bytes, false) {
         Ok(image) => image,
         Err(_) => {
             return ThumbResult {
@@ -674,6 +678,7 @@ impl App {
             self.settings.filter,
             self.settings.cache_bytes,
             self.settings.resample_bytes,
+            self.settings.exif_orientation,
         );
 
         self.book = Some(book);

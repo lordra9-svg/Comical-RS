@@ -11,7 +11,7 @@ mod rotate;
 
 use std::fmt;
 
-pub use decode::{MAX_DECODED_PIXELS, decode, probe_size};
+pub use decode::{MAX_DECODED_PIXELS, decode, exif_rotation, probe_size};
 pub use error::ImageError;
 pub use resize::{Filter, resize};
 pub use rotate::{Rotation, rotate};

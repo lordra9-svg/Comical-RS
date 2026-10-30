@@ -92,6 +92,14 @@ Still open for later milestones:
 
 1. Context menu.
 2. Manual acceptance checklist on macOS and Linux.
+3. Webtoon / continuous vertical scroll mode.
+4. Apply EXIF orientation when `exif_orientation` setting is on.
+5. Parallel page preload with rayon (background prefetch beyond current workers).
+6. WebP and AVIF decode support.
+7. Fuzz targets for archive open/read paths.
+8. Packaging: installers, file associations and icons.
+9. RAR writer corpus samples for `tests/corpus/`.
+10. ZIP64 and CP437 edge-case fixtures.
 
 Toolkit decision: eframe/egui with the `wgpu` backend, `rfd` for the file
 dialog, `lru` for the two caches.
@@ -146,6 +154,134 @@ the entry cap small in fuzz targets.
 
 Not started. Needs installers, file associations and icons. Do not start before
 the UI and image pipeline are stable.
+
+## M7: EXIF orientation
+
+Target crate: `comical-image`. The `exif_orientation` setting is already parsed
+and persisted but not applied.
+
+Planned responsibilities:
+
+1. Parse EXIF orientation tag from JPEG bytes (and PNG tEXt if present).
+2. Map orientation values 1–8 to the existing `Rotation` enum or a new transform.
+3. Apply the orientation during decode when the setting is on; skip when off.
+4. Update `probe_size` to return oriented dimensions when EXIF is honored.
+5. Add test vectors for each of the eight EXIF orientations.
+
+Open implementation choices:
+
+- Use the `kamadak-exif` crate or parse the tag manually (it is 12 bytes in a
+  known location for JPEG).
+- Whether to rotate pixels or just adjust the spread layout.
+
+Testing:
+
+- Unit tests for each orientation value.
+- Golden hash vectors for at least one image per orientation.
+- Integration test verifying the setting toggle changes output.
+
+## M8: Webtoon / continuous vertical scroll mode
+
+Target crates: `comical-core`, `comical-app`.
+
+Planned responsibilities:
+
+1. Add `ViewMode::Webtoon` variant.
+2. Lay out all pages in a single vertical strip with configurable gap.
+3. Scroll position replaces page index as the navigation state.
+4. Zoom modes apply uniformly to the strip width.
+5. Keyboard navigation scrolls by viewport height or to next page boundary.
+6. Thumbnail browser highlights the page currently at the top of the viewport.
+7. Remember scroll position per book alongside `remember_page`.
+
+Open implementation choices:
+
+- Virtualize rendering (only decode visible pages + margin) or rely on the
+  existing byte-budgeted cache.
+- Gap size: fixed pixels or configurable setting.
+- Whether two-page spreads appear side-by-side in webtoon mode.
+
+Testing:
+
+- Layout unit tests for various page counts and sizes.
+- Scroll position persistence round-trip test.
+- Visual acceptance on a real webtoon-format archive.
+
+## M9: Parallel page preload with rayon
+
+Target crate: `comical-app`.
+
+Planned responsibilities:
+
+1. Replace or augment the crossbeam background workers with a rayon thread pool.
+2. Prefetch decoded pages ahead of the current viewport based on scroll velocity.
+3. Respect the existing `cache_bytes` budget; do not prefetch beyond it.
+4. Cancel pending prefetched on page turn or zoom change.
+5. Measure and document throughput improvement over the current worker model.
+
+Open implementation choices:
+
+- Keep crossbeam for decode completion signaling and use rayon only for CPU work.
+- Adaptive prefetch window based on frame time budget.
+
+Testing:
+
+- Benchmark comparing cold-open latency with and without preload.
+- Stress test: rapid page turns do not leak memory or stall the UI.
+
+## M10: WebP and AVIF decode support
+
+Target crate: `comical-image`.
+
+Planned responsibilities:
+
+1. Add WebP and AVIF to the supported format list in `decode`.
+2. Update `probe_size` to handle both formats.
+3. Add corpus fixtures for each format.
+4. Update the behavior spec to include them.
+
+Open implementation choices:
+
+- Use the `image` crate's built-in WebP/AVIF support or dedicated crates
+  (`webp`, `avif-decode`).
+- Alpha handling policy for both formats.
+
+Testing:
+
+- Decode golden vectors for representative samples.
+- Corpus entries covering lossy, lossless and animated variants.
+
+## M11: Fuzz targets
+
+Target: workspace-level fuzz directory.
+
+Planned responsibilities:
+
+1. Fuzz `ComicArchive::open` for ZIP, RAR and 7z.
+2. Fuzz `decode` and `probe_size` with truncated and malformed input.
+3. Fuzz `SpreadState` navigation with arbitrary page counts.
+4. Set entry caps to keep runs fast.
+5. Integrate into CI as a nightly job.
+
+Testing:
+
+- Seed corpus from existing test vectors and corpus fixtures.
+- Document any crashes found and their fixes.
+
+## M12: Packaging and release
+
+Planned responsibilities:
+
+1. Choose a product name.
+2. Generate platform icons and file association metadata.
+3. Build installers for Windows (MSI/NSIS), macOS (DMG/pkg) and Linux
+   (AppImage/deb/rpm).
+4. Sign binaries where applicable.
+5. Publish release notes and changelog.
+6. Independent clean-room review and legal sign-off.
+
+Do not start until M7–M11 are stable and the UI passes manual acceptance on
+all three platforms.
 
 ## Open decisions
 

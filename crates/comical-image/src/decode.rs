@@ -2,6 +2,7 @@
 
 use std::io::Cursor;
 
+use crate::rotate::Rotation;
 use crate::{ImageError, RgbImage};
 
 /// Upper bound on decoded pixels accepted by [`decode`].
@@ -14,12 +15,53 @@ pub const MAX_DECODED_PIXELS: u64 = 100_000_000;
 /// Reads the pixel dimensions of PNG, JPEG or GIF bytes without decoding the
 /// image data.
 ///
-/// The same format checks and pixel limit as [`decode`] apply, so a header
-/// accepted here can be decoded later. This is used to lay out a page before
-/// its full-resolution decode finishes.
-pub fn probe_size(bytes: &[u8]) -> Result<(u32, u32), ImageError> {
+/// When `apply_exif` is true and the image carries an EXIF orientation tag,
+/// the returned dimensions are swapped for orientations that rotate the image
+/// 90 or 270 degrees. The same format checks and pixel limit as [`decode`]
+/// apply, so a header accepted here can be decoded later. This is used to lay
+/// out a page before its full-resolution decode finishes.
+pub fn probe_size(bytes: &[u8], apply_exif: bool) -> Result<(u32, u32), ImageError> {
     let (_, width, height) = format_and_dimensions(bytes)?;
+    if apply_exif {
+        let rotation = exif_rotation(bytes);
+        if rotation.swaps_dimensions() {
+            return Ok((height, width));
+        }
+    }
     Ok((width, height))
+}
+
+/// Returns the EXIF orientation as a [`Rotation`], or [`Rotation::None`] when
+/// no orientation tag is present or the value is not one of 1–8.
+///
+/// Only JPEG (and TIFF-embedded) images carry EXIF; other formats return
+/// [`Rotation::None`] without error. Parse failures are silently ignored so a
+/// corrupt EXIF segment never blocks decoding.
+pub fn exif_rotation(bytes: &[u8]) -> Rotation {
+    let ms = match nom_exif::MediaSource::from_memory(bytes.to_vec()) {
+        Ok(ms) => ms,
+        Err(_) => return Rotation::None,
+    };
+    let mut parser = nom_exif::MediaParser::new();
+    let iter = match parser.parse_exif(ms) {
+        Ok(iter) => iter,
+        Err(_) => return Rotation::None,
+    };
+    let exif: nom_exif::Exif = iter.into();
+    let orientation = exif
+        .get(nom_exif::ExifTag::Orientation)
+        .and_then(|v| v.as_u16());
+    match orientation {
+        Some(1) => Rotation::None,
+        Some(2) => Rotation::None, // mirrored horizontally; we do not flip, treat as none
+        Some(3) => Rotation::Cw180,
+        Some(4) => Rotation::Cw180, // mirrored vertically; approximate with 180
+        Some(5) => Rotation::Cw90,  // mirrored + 90 CW; approximate with 90
+        Some(6) => Rotation::Cw90,
+        Some(7) => Rotation::Cw270, // mirrored + 270 CW; approximate with 270
+        Some(8) => Rotation::Cw270,
+        _ => Rotation::None,
+    }
 }
 
 fn format_and_dimensions(bytes: &[u8]) -> Result<(image::ImageFormat, u32, u32), ImageError> {
@@ -53,11 +95,12 @@ fn format_and_dimensions(bytes: &[u8]) -> Result<(image::ImageFormat, u32, u32),
 
 /// Decodes PNG, JPEG or GIF bytes to an opaque RGB image.
 ///
-/// Alpha is ignored, not composited: an RGBA pixel keeps its colour channels
-/// and simply loses its alpha byte. For GIF input the first frame is decoded.
-/// Unsupported, truncated or malformed data returns an [`ImageError`] instead
-/// of panicking.
-pub fn decode(bytes: &[u8]) -> Result<RgbImage, ImageError> {
+/// When `apply_exif` is true and the image carries an EXIF orientation tag,
+/// the decoded pixels are rotated to match before returning. Alpha is ignored,
+/// not composited: an RGBA pixel keeps its colour channels and simply loses
+/// its alpha byte. For GIF input the first frame is decoded. Unsupported,
+/// truncated or malformed data returns an [`ImageError`] instead of panicking.
+pub fn decode(bytes: &[u8], apply_exif: bool) -> Result<RgbImage, ImageError> {
     let (format, header_width, header_height) = format_and_dimensions(bytes)?;
 
     let mut limits = image::Limits::no_limits();
@@ -76,7 +119,15 @@ pub fn decode(bytes: &[u8]) -> Result<RgbImage, ImageError> {
 
     let rgb = decoded.to_rgb8();
     let (width, height) = rgb.dimensions();
-    RgbImage::new(width, height, rgb.into_raw())
+    let image = RgbImage::new(width, height, rgb.into_raw())?;
+
+    if apply_exif {
+        let rotation = exif_rotation(bytes);
+        if rotation != Rotation::None {
+            return Ok(crate::rotate::rotate(&image, rotation));
+        }
+    }
+    Ok(image)
 }
 
 fn decode_failure(error: image::ImageError) -> ImageError {

@@ -11,6 +11,7 @@ thiserror = { workspace = true }
 
 # Decode only: PNG, JPEG and GIF. Encoders and other formats stay disabled.
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif"] }
+nom-exif = "3"
 
 [dev-dependencies]
 serde_json = "1"

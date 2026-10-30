@@ -36,6 +36,11 @@ impl Rotation {
             Self::Cw270 => Self::Cw90,
         }
     }
+
+    /// Whether this rotation swaps width and height.
+    pub const fn swaps_dimensions(self) -> bool {
+        matches!(self, Self::Cw90 | Self::Cw270)
+    }
 }
 
 /// Rotates an image clockwise without interpolation.
