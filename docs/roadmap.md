@@ -14,8 +14,13 @@ planned item as a contract until it has tests and a spec section.
 | M4–M5 desktop UI | Done | `comical-app` (toolbar, thumbs, rotation, RTL, settings) |
 | Memory budgets | Done | `comical-app/src/cache.rs` (byte-budgeted LRU) |
 | CI | Done | `.github/workflows/ci.yml`, `scripts/ci.sh` |
+| M7 EXIF orientation | Done | `comical-image/src/decode.rs` (nom-exif) |
+| M8 Webtoon mode (data model) | Done | `comical-core/src/spread.rs` (`ViewMode::Webtoon`) |
+| M9 parallel prefetch | Done | `comical-app/src/app.rs` (rayon prefetch_around) |
+| M10 WebP/AVIF decode | Done | `comical-image/Cargo.toml` (image features) |
+| M11 fuzz targets | Done | `fuzz/fuzz_targets/` (archive, decode, navigation) |
 | Real archive corpus | In progress | `tests/corpus/` Info-ZIP + 7-Zip; RAR writer samples open |
-| Packaging | Not started | no installers or associations |
+| M12 packaging | In progress | release scripts scaffolded; installers pending |
 
 ## M3: image pipeline
 
