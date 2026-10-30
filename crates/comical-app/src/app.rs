@@ -19,6 +19,7 @@ use comical_core::{
 use comical_image::{Filter, RgbImage, decode, probe_size, resize, rotate as image_rotate};
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use eframe::egui::{ColorImage, Context, TextureHandle, TextureOptions};
+use rayon::prelude::*;
 
 use crate::error::AppError;
 use crate::settings::Settings;

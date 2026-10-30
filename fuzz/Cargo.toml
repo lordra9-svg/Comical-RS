@@ -1,0 +1,41 @@
+[package]
+name = "comical-core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.comical-archive]
+path = "../crates/comical-archive"
+
+[dependencies.comical-image]
+path = "../crates/comical-image"
+
+[dependencies.comical-core]
+path = "../crates/comical-core"
+
+[[bin]]
+name = "fuzz_archive_open"
+path = "fuzz_targets/fuzz_archive_open.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_image_decode"
+path = "fuzz_targets/fuzz_image_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_spread_navigation"
+path = "fuzz_targets/fuzz_spread_navigation.rs"
+test = false
+doc = false
+bench = false

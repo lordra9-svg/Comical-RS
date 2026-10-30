@@ -940,6 +940,7 @@ dependencies = [
  "eframe",
  "egui",
  "lru",
+ "rayon",
  "rfd",
  "serde",
  "tempfile",

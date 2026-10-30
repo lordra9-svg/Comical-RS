@@ -24,6 +24,7 @@ comical-core = { workspace = true }
 comical-archive = { workspace = true }
 comical-image = { path = "../comical-image" }
 crossbeam-channel = "0.5"
+rayon = "1"
 
 [dev-dependencies]
 tempfile = "3"
