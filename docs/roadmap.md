@@ -12,6 +12,7 @@ planned item as a contract until it has tests and a spec section.
 | M2 core layout and zoom | Done | `comical-core` |
 | M3 image pipeline | Done | `comical-image` |
 | M4–M5 desktop UI | Done | `comical-app` (toolbar, thumbs, rotation, RTL, settings) |
+| Memory budgets | Done | `comical-app/src/cache.rs` (byte-budgeted LRU) |
 | CI | Done | `.github/workflows/ci.yml`, `scripts/ci.sh` |
 | Real archive corpus | In progress | `tests/corpus/` Info-ZIP + 7-Zip; RAR writer samples open |
 | Packaging | Not started | no installers or associations |
@@ -82,11 +83,15 @@ Shipped after M4, second slice:
 3. Drift-free golden image vectors on macOS arm64 (arithmetic `sin` in the
    Lanczos kernel).
 
+Shipped after M4, third slice:
+
+1. Byte-budgeted LRU caches (`src/cache.rs`) driven by `cache_bytes` and
+   `resample_bytes`, replacing the fixed ten-page cache.
+
 Still open for later milestones:
 
 1. Context menu.
-2. Byte-budgeted caches driven by `cache_bytes` and `resample_bytes`.
-3. Manual acceptance checklist on macOS and Linux.
+2. Manual acceptance checklist on macOS and Linux.
 
 Toolkit decision: eframe/egui with the `wgpu` backend, `rfd` for the file
 dialog, `lru` for the two caches.

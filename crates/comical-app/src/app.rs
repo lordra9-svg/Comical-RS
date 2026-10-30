@@ -4,13 +4,13 @@
 //! [`SpreadState`] navigation model, decoded-page and texture caches, and view
 //! settings (zoom, pan, fullscreen).
 
-use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use crate::cache::{ByteLru, ByteSize};
 use comical_archive::{ComicArchive, DEFAULT_MAX_ENTRY_BYTES};
 use comical_core::{
     Direction, MAX_CUSTOM_PERCENT, MIN_CUSTOM_PERCENT, PageEntry, PageOrientation, PagePart,
@@ -19,13 +19,26 @@ use comical_core::{
 use comical_image::{Filter, RgbImage, decode, probe_size, resize, rotate as image_rotate};
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use eframe::egui::{ColorImage, Context, TextureHandle, TextureOptions};
-use lru::LruCache;
 
 use crate::error::AppError;
 use crate::settings::Settings;
 
-/// Number of decoded pages and uploaded textures kept in memory.
-const CACHE_PAGES: usize = 10;
+impl ByteSize for RgbImage {
+    fn byte_size(&self) -> u64 {
+        // Pixels are stored contiguously as RGB bytes.
+        (self.width() as u64) * (self.height() as u64) * 3
+    }
+}
+
+impl ByteSize for TextureHandle {
+    fn byte_size(&self) -> u64 {
+        // GPU texture size is not directly queryable from egui. Use the source
+        // image dimensions that produced this handle as a conservative proxy;
+        // the actual VRAM footprint is at least this large.
+        let size = self.size();
+        (size[0] as u64) * (size[1] as u64) * 4
+    }
+}
 
 /// Longest side of an uploaded page texture, in pixels.
 ///
@@ -96,9 +109,9 @@ struct OpenedBook {
     /// Per-page error message, so a broken page is not retried every frame.
     page_errors: Vec<Option<String>>,
     /// Decoded pages at natural size, keyed by page index.
-    natural: LruCache<usize, RgbImage>,
+    natural: ByteLru<usize, RgbImage>,
     /// Uploaded page textures, keyed by page, part and rotation.
-    textures: LruCache<TextureKey, TextureHandle>,
+    textures: ByteLru<TextureKey, TextureHandle>,
     /// Sends decode requests to the background worker.
     decode_tx: Sender<DecodeRequest>,
     /// Receives completed decodes from the background worker.
@@ -125,7 +138,12 @@ struct OpenedBook {
 }
 
 impl OpenedBook {
-    fn new(archive: Box<dyn ComicArchive + Send>, filter: Filter) -> Self {
+    fn new(
+        archive: Box<dyn ComicArchive + Send>,
+        filter: Filter,
+        cache_bytes: u64,
+        resample_bytes: u64,
+    ) -> Self {
         let pages = archive.pages().to_vec();
         let count = pages.len();
         let (decode_tx, worker_rx) = unbounded::<DecodeRequest>();
@@ -173,8 +191,8 @@ impl OpenedBook {
             archive,
             page_sizes: vec![None; count],
             page_errors: vec![None; count],
-            natural: LruCache::new(cache_capacity()),
-            textures: LruCache::new(cache_capacity()),
+            natural: ByteLru::new(cache_bytes),
+            textures: ByteLru::new(resample_bytes),
             decode_tx,
             decode_rx,
             pending: std::collections::HashSet::new(),
@@ -651,7 +669,12 @@ impl App {
         let orientations = vec![PageOrientation::Portrait; count];
         let rotations = vec![Rotation::North; count];
         let spread = SpreadState::new(orientations.clone(), self.zoom.mode)?;
-        let book = OpenedBook::new(archive, self.settings.filter);
+        let book = OpenedBook::new(
+            archive,
+            self.settings.filter,
+            self.settings.cache_bytes,
+            self.settings.resample_bytes,
+        );
 
         self.book = Some(book);
         self.orientations = orientations;
@@ -1449,10 +1472,6 @@ fn book_key(path: &str) -> String {
     std::fs::canonicalize(path)
         .map(|canonical| canonical.to_string_lossy().into_owned())
         .unwrap_or_else(|_| path.to_owned())
-}
-
-fn cache_capacity() -> NonZeroUsize {
-    NonZeroUsize::new(CACHE_PAGES).expect("CACHE_PAGES is non-zero")
 }
 
 fn clamp_percent(percent: i64) -> u32 {

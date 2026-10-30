@@ -151,9 +151,14 @@ The settings window (`S`) exposes direction, layout, zoom, fit-only, filter,
 natural sort, remember page and panel visibility. Changing the filter clears the
 texture cache so the next frame decodes with the new kernel.
 
-`cache_bytes` and `resample_bytes` are parsed and persisted but do not yet drive
-the caches, which are counted in pages. That gap is tracked in
-`docs/roadmap.md`.
+`cache_bytes` and `resample_bytes` drive two byte-budgeted LRU caches in
+`src/cache.rs`. `cache_bytes` bounds decoded pages at natural size;
+`resample_bytes` bounds uploaded page textures. An entry is measured at insert
+time (`width × height × 3` for RGB pixels, `width × height × 4` for textures)
+and the least-recently-used entries are evicted until the new entry fits. An
+entry larger than its budget is still admitted and evicts everything else, so
+a single huge page cannot deadlock the viewer. Keeping textures in a separate
+budget means a book with many zoom levels cannot push decoded pages out.
 
 ## Password prompt
 

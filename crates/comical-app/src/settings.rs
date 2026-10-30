@@ -28,7 +28,7 @@ pub struct Settings {
     #[serde(default = "default_cache_bytes")]
     pub cache_bytes: u64,
 
-    /// Resampling workspace size in bytes.
+    /// Budget for uploaded page textures, in bytes.
     #[serde(default = "default_resample_bytes")]
     pub resample_bytes: u64,
 

@@ -17,8 +17,8 @@ If you encounter forbidden material, stop and report it.
 M6 infrastructure slice in progress. The viewer opens ZIP, RAR, 7z and directory
 books with one- and two-page spreads, zoom modes, keyboard navigation, drag pan,
 wheel pan, Ctrl+wheel zoom, fullscreen, toolbar, thumbnails, rotation, RTL,
-selectable resampling filters, optional natural page order, remembered last page
-and persistent settings.
+selectable resampling filters, optional natural page order, remembered last page,
+persistent settings and byte-budgeted page/texture caches.
 `comical-cli` lists and extracts pages. Cross-platform CI runs on Windows,
 macOS and Linux. A real-writer archive corpus under `tests/corpus/` covers
 Info-ZIP and 7-Zip fixtures (list and exact-byte extract). Packaging and release

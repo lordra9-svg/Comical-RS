@@ -15,6 +15,7 @@
 
 mod app;
 mod browser;
+mod cache;
 mod error;
 mod nav;
 mod settings;
