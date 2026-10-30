@@ -1,16 +1,7 @@
 # comical-rs
 
-A behavior-compatible comic viewer for Windows, macOS and Linux. It reads ZIP,
+A behavior-compatible comic viewer for Windows, macOS (pending) and Linux. It reads ZIP,
 RAR and 7z archives and is written from a clean-room specification.
-
-## Clean-room rule
-
-Read only this repository. Do not open the original Comical source, the
-analysis document, the C++ harness, the Bloks memory files, or any notes that
-quote or describe the original code. Work from `spec/behavior.md` and
-`tests/vectors/` only.
-
-If you encounter forbidden material, stop and report it.
 
 ## Status
 
