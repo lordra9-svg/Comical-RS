@@ -52,6 +52,14 @@ struct Wheel {
 ///
 /// Returns `true` if the input was consumed (the app handled it).
 pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
+    // A focused text field owns the keyboard. Without this guard, typing a
+    // password into the prompt would also navigate, rotate pages, toggle panels
+    // and flip the reading direction, because egui widgets and this handler
+    // both see the same key events.
+    if ctx.wants_keyboard_input() {
+        return false;
+    }
+
     let (pressed, wheel, shift) = ctx.input(|input| {
         let shift = input.modifiers.shift;
         let ctrl = input.modifiers.ctrl;
@@ -78,11 +86,11 @@ pub fn handle_input(ctx: &Context, app: &mut App) -> bool {
             zoom_reset: input.key_pressed(Key::Num0),
             fullscreen: input.key_pressed(Key::F11),
             toggle_direction: input.key_pressed(Key::D),
-            // Rotation: [ or Shift+Left for left page CCW, ] or Shift+Right for left page CW
-            rotate_left_ccw: input.key_pressed(Key::OpenBracket)
-                || (shift && input.key_pressed(Key::ArrowLeft)),
-            rotate_left_cw: input.key_pressed(Key::CloseBracket)
-                || (shift && input.key_pressed(Key::ArrowRight)),
+            // Rotation: [ for the left page, Ctrl+[ for the right page. Do not
+            // add Shift+arrow aliases here: Shift+arrows are the horizontal
+            // scroll path below, so an alias would shadow it.
+            rotate_left_ccw: input.key_pressed(Key::OpenBracket),
+            rotate_left_cw: input.key_pressed(Key::CloseBracket),
             // Right page rotation: Ctrl+[ / Ctrl+]
             rotate_right_ccw: ctrl && input.key_pressed(Key::OpenBracket),
             rotate_right_cw: ctrl && input.key_pressed(Key::CloseBracket),

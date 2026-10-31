@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Build release binaries for all platforms.
+# Build release binaries and packages for all platforms.
 # Usage: ./scripts/release.sh [version]
-# If no version is given, reads from Cargo.toml.
+# If no version is given, reads the workspace version from Cargo.toml.
 
 set -euo pipefail
 
-VERSION="${1:-$(grep '^version' crates/comical-app/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')}"
+# The version lives in [workspace.package]; every crate inherits it through
+# `version.workspace = true`, so a crate manifest has no literal version.
+VERSION="${1:-$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')}"
+if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "release: could not determine the version (read '${VERSION}' from Cargo.toml)" >&2
+    exit 1
+fi
 TARGET_DIR="target/release-dist/${VERSION}"
 
 echo "Building Comical v${VERSION}..."
@@ -16,10 +22,15 @@ echo "[linux-x86_64] cargo build --release"
 cargo build --release -p comical-app --bin comical
 cp target/release/comical "${TARGET_DIR}/comical-linux-x86_64"
 
+# Portable tarball for the Linux binary.
+echo "[linux-tar] comical-${VERSION}-linux-x86_64.tar.gz"
+tar -czf "${TARGET_DIR}/comical-${VERSION}-linux-x86_64.tar.gz" -C target/release comical
+
 # Linux .deb (requires cargo-deb)
 if command -v cargo-deb &>/dev/null; then
     echo "[linux-deb] cargo deb"
-    cargo deb -p comical-app --no-build --output "${TARGET_DIR}/"
+    cargo deb -p comical-app --no-build \
+        --output "${TARGET_DIR}/comical_${VERSION}-1_amd64.deb"
 else
     echo "[linux-deb] SKIP: cargo-deb not installed (cargo install cargo-deb)"
 fi
@@ -54,6 +65,17 @@ else
     echo "[macos] SKIP: not on macOS"
 fi
 
+# Checksums for every artifact in the release directory.
+if command -v sha256sum &>/dev/null; then
+    echo "[checksums] SHA256SUMS.txt"
+    (
+        cd "${TARGET_DIR}"
+        find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > SHA256SUMS.txt
+    )
+fi
+
 echo ""
 echo "Release artifacts in ${TARGET_DIR}:"
 ls -lh "${TARGET_DIR}/"
@@ -61,5 +83,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Test each binary on its target platform"
 echo "  2. Sign Windows/macOS binaries if applicable"
-echo "  3. Create GitHub release with changelog"
+echo "  3. Create GitHub release with changelog and SHA256SUMS.txt"
 echo "  4. Upload artifacts to release"

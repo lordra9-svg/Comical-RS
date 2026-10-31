@@ -111,17 +111,26 @@ draw scrollbars; it pans instead. See the divergences below.
 
 | Key | Action |
 |---|---|
-| Right, Page Down, J | Next turn |
-| Left, Page Up, K | Previous turn |
+| Right, Left | Next page, previous page (swapped in RTL) |
 | Down, Space | Next page |
 | Up, Backspace | Previous page |
+| Page Down, J | Next turn |
+| Page Up, K | Previous turn |
+| Shift + arrows | Scroll 10 px |
 | Home, End | First, last spread |
 | 1, 2 | One-page, two-page |
 | F | Cycle Fit, Width, Height, Full, Custom |
 | W, H, O, C | Fit width, fit height, original, custom |
 | `+`, `=`, `-` | Custom percent by 10 |
 | 0 | Custom 100% |
+| `[`, `]` | Rotate left page counter-clockwise, clockwise |
+| Ctrl+`[`, Ctrl+`]` | Rotate right page counter-clockwise, clockwise |
+| D | Toggle LTR/RTL |
+| T, B | Toggle toolbar, page browser |
 | F11 | Fullscreen |
+
+Shortcuts are ignored while a text field has focus, so the password prompt
+receives every key.
 
 Wheel scroll pans the content; Ctrl+wheel steps the custom zoom by 10 points.
 Left drag pans. Pan resets on every page, view-mode and zoom change.
@@ -148,8 +157,11 @@ file cannot grow without limit, and books are keyed by canonical path so a
 relative path, an absolute path and a symlink share one entry.
 
 The settings window (`S`) exposes direction, layout, zoom, fit-only, filter,
-natural sort, remember page and panel visibility. Changing the filter clears the
-texture cache so the next frame decodes with the new kernel.
+natural sort, EXIF orientation, remember page and panel visibility. Changing
+the filter clears the texture cache so the next frame decodes with the new
+kernel. Changing EXIF orientation drops the probed sizes, decoded pages,
+textures and thumbnails of the open book, because all of them derive from the
+orientation.
 
 `cache_bytes` and `resample_bytes` drive two byte-budgeted LRU caches in
 `src/cache.rs`. `cache_bytes` bounds decoded pages at natural size;

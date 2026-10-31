@@ -58,6 +58,11 @@ impl ThumbnailCache {
     pub(crate) fn put(&mut self, page: usize, handle: TextureHandle) {
         self.textures.put(page, handle);
     }
+
+    /// Drops every cached thumbnail, for when the pixels behind them change.
+    pub(crate) fn clear(&mut self) {
+        self.textures.clear();
+    }
 }
 
 impl Default for ThumbnailCache {

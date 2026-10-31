@@ -228,6 +228,24 @@ impl OpenedBook {
         self.pending.clear();
     }
 
+    /// Switches EXIF orientation handling and drops everything derived from it.
+    ///
+    /// Oriented sizes, decoded pixels, uploaded textures and thumbnails all
+    /// depend on the setting, so nothing cached under the old value is reused.
+    fn set_exif_orientation(&mut self, enabled: bool) {
+        self.exif_orientation = enabled;
+        self.page_sizes.fill(None);
+        self.page_errors.fill(None);
+        self.natural.clear();
+        self.textures.clear();
+        self.thumb_cache.clear();
+        self.thumb_pending.clear();
+        self.cancel_pending();
+        // Pages the prefetch task decoded under the old setting would
+        // otherwise land in the natural cache after this reset.
+        while self.prefetch_rx.try_recv().is_ok() {}
+    }
+
     /// Returns the natural full-page size, reading only the image header.
     ///
     /// The full image is decoded later on the background worker. Parsing the
@@ -263,7 +281,12 @@ impl OpenedBook {
             });
         }
 
-        let mut guard = self.archive.lock().unwrap();
+        // A panicking background worker must not take the viewer down with it;
+        // the archive handle stays usable after a poisoned lock.
+        let mut guard = self
+            .archive
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match guard.read_page(page, DEFAULT_MAX_ENTRY_BYTES) {
             Ok(bytes) => Ok(bytes),
             Err(error) => {
@@ -499,7 +522,7 @@ fn decode_request(
 
     let bytes = match archive
         .lock()
-        .unwrap()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .read_page(req.key.page, DEFAULT_MAX_ENTRY_BYTES)
     {
         Ok(bytes) => bytes,
@@ -602,7 +625,7 @@ fn decode_thumbnail(
     let name = format!("thumb-{page}");
     let bytes = match archive
         .lock()
-        .unwrap()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .read_page(page, DEFAULT_MAX_ENTRY_BYTES)
     {
         Ok(bytes) => bytes,
@@ -1357,6 +1380,10 @@ impl App {
                     &mut self.settings.natural_sort,
                     "Natural page order (applies on next open)",
                 );
+                let mut exif = self.settings.exif_orientation;
+                if ui.checkbox(&mut exif, "Apply EXIF orientation").changed() {
+                    self.set_exif_orientation(exif);
+                }
                 ui.checkbox(&mut self.settings.remember_page, "Remember the last page");
                 ui.separator();
                 ui.heading("Interface");
@@ -1403,6 +1430,23 @@ impl App {
             book.pending.clear();
             book.cancel_pending();
         }
+        self.sync_settings();
+    }
+
+    /// Enables or disables EXIF orientation for the open book and later opens.
+    ///
+    /// Sizes, decoded pixels and thumbnails all depend on the setting, so the
+    /// per-book caches are dropped and every page is probed again.
+    pub fn set_exif_orientation(&mut self, enabled: bool) {
+        if self.settings.exif_orientation == enabled {
+            return;
+        }
+        self.settings.exif_orientation = enabled;
+        if let Some(book) = self.book.as_mut() {
+            book.set_exif_orientation(enabled);
+        }
+        // The spread was built from sizes probed under the old setting.
+        self.changed_pages.clear();
         self.sync_settings();
     }
 
@@ -1686,6 +1730,44 @@ fn title_for(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A valid 4x3 RGB PNG, matching the fixture used by the other app tests.
+    const PAGE_PNG: &[u8] = &[
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x03, 0x08, 0x02, 0x00, 0x00, 0x00, 0x3b,
+        0x96, 0x39, 0x91, 0x00, 0x00, 0x00, 0x30, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x60,
+        0x60, 0x38, 0xa1, 0xc1, 0x70, 0x22, 0x80, 0xe1, 0x44, 0x05, 0xc3, 0x09, 0x06, 0x2e, 0x9b,
+        0x13, 0x46, 0x36, 0x27, 0xa2, 0x6c, 0x4e, 0x34, 0xd9, 0x9c, 0x60, 0x10, 0xa9, 0x38, 0x61,
+        0x53, 0x71, 0x22, 0xa5, 0xe2, 0x44, 0x4f, 0xc5, 0x09, 0x00, 0x04, 0x4a, 0x0f, 0x79, 0xd3,
+        0x19, 0xe5, 0xf2, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
+
+    #[test]
+    fn toggling_exif_orientation_reprobes_the_open_book() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        std::fs::write(directory.path().join("page0.png"), PAGE_PNG).expect("write png page");
+        let book = directory.path().to_str().expect("temp path is utf-8");
+
+        let mut app = App::with_settings(Settings::default());
+        app.open_book(book).expect("open book");
+        assert_eq!(app.page_size(0).expect("probe page 0"), Size::new(4, 3));
+        {
+            let opened = app.book.as_ref().expect("book");
+            assert!(opened.page_sizes[0].is_some());
+            assert!(!opened.exif_orientation);
+        }
+
+        app.set_exif_orientation(true);
+        assert!(app.settings().exif_orientation);
+        let opened = app.book.as_ref().expect("book");
+        assert!(opened.exif_orientation);
+        assert!(
+            opened.page_sizes[0].is_none(),
+            "a size probed under the old setting must be discarded"
+        );
+
+        assert_eq!(app.page_size(0).expect("re-probe page 0"), Size::new(4, 3));
+    }
 
     fn app_with_pages(pages: Vec<PageOrientation>) -> App {
         let mut app = App::new();
