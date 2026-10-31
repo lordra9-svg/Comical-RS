@@ -43,7 +43,7 @@ cargo test -p comical-archive --test corpus
 Requires Info-ZIP `zip` and 7-Zip `7z` on `PATH`:
 
 ```text
-./scripts/regen-corpus.sh
+cargo run -p xtask -- regen-corpus
 ```
 
 Then re-run the corpus test. Do not regenerate from the Rust `xtask` writers;

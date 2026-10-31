@@ -38,11 +38,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: Test
-        run: cargo test
+      # One entry point keeps CI and the local gate identical.
+      - name: Run the gate
+        run: cargo run -p xtask -- ci

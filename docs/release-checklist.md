@@ -1,7 +1,8 @@
 # Release Checklist
 
 This document covers the manual and external steps required before publishing
-a Comical-RS release. Automated packaging is handled by `scripts/release.sh`;
+a Comical-RS release. Automated packaging is handled by
+`cargo run -p xtask -- release`;
 this checklist covers everything that cannot be automated.
 
 ## Pre-release verification

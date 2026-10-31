@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Development tooling: synthetic archive fixtures"
+description = "Development tooling: fixtures, the local gate, the corpus and releases"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,6 +16,12 @@ name = "xtask"
 path = "src/main.rs"
 
 [dependencies]
+clap = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+flate2 = "1"
+tar = "0.4"
 # Writers exist only in this development tool and in tests.
 zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs", "aes-crypto"] }
 rars = { version = "0.11", default-features = false, features = ["write", "encryption"] }

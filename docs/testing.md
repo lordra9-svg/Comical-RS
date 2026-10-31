@@ -220,7 +220,7 @@ hashes the output. Do not regenerate vectors from the Rust implementation.
 `xtask` writes synthetic archives:
 
 ```text
-cargo run -p xtask -- target/fixtures
+cargo run -p xtask -- fixtures target/fixtures
 ```
 
 It writes:
@@ -308,7 +308,7 @@ Run the binary directly to see stderr. The tests compare exact output for
 `crates/comical-archive/tests/corpus.rs` reads `tests/corpus/manifest.json` and
 the committed Info-ZIP / 7-Zip fixtures under `tests/corpus/fixtures/`. It checks
 page order and exact extracted bytes (and SHA-256). Truncated fixtures must fail
-to open. Regenerate with `./scripts/regen-corpus.sh` when the writers or page
+to open. Regenerate with `cargo run -p xtask -- regen-corpus` when the writers or page
 stubs change. See `tests/corpus/README.md`.
 
 ## CI
@@ -316,9 +316,7 @@ stubs change. See `tests/corpus/README.md`.
 `.github/workflows/ci.yml` runs on Windows, macOS and Linux:
 
 ```text
-cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test
+cargo run -p xtask -- ci
 ```
 
 The workflow uses `actions/checkout@v7` and `Swatinem/rust-cache@v2`, both of
@@ -327,8 +325,9 @@ release and triggers a deprecation warning. Superseded runs on the same ref are
 cancelled, and the token is limited to `contents: read`. There is no JavaScript
 in the product, so Node exists only for the actions themselves.
 
-`scripts/ci.sh` is the local mirror. Keep the archive and corpus tests in the
-matrix; they are pure Rust and should run on all three platforms.
+`cargo run -p xtask -- ci` runs the same gate locally. Keep the archive and
+corpus tests in the matrix; they are pure Rust and should run on all three
+platforms.
 
 Golden image hashes are expected to be bit-identical everywhere. The Lanczos
 kernel must not call the platform `f64::sin`; see `docs/image.md`. A failure on

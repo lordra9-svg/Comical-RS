@@ -26,8 +26,8 @@ comical-app  --->  comical-core, comical-archive, comical-image
     |
     +--> eframe, egui, rfd, lru, thiserror
 
-xtask            (development only: writes synthetic test archives)
-    +--> zip, rars, sevenz-rust writer features
+xtask            (development only: fixtures, gate, corpus, releases)
+    +--> zip, rars, sevenz-rust writer features, clap, tar, flate2, sha2
 ```
 
 ## Dependency rules

@@ -34,8 +34,10 @@ This repository is MIT. These dependencies keep their own licenses.
 | `egui` | MIT OR Apache-2.0 | UI |
 | `clap` | MIT OR Apache-2.0 | CLI |
 | `tempfile` | MIT OR Apache-2.0 | Test-only temporary directories |
+| `tar` | MIT OR Apache-2.0 | Dev-only release tarball |
+| `xattr` | MIT OR Apache-2.0 | Extended attributes behind `tar` |
 | `serde` | MIT OR Apache-2.0 | Settings |
-| `serde_json` | MIT OR Apache-2.0 | Test vectors |
+| `serde_json` | MIT OR Apache-2.0 | Test vectors and corpus manifest |
 | `toml` | MIT OR Apache-2.0 | Settings |
 | `thiserror` | MIT OR Apache-2.0 | Library errors |
 | `anyhow` | MIT OR Apache-2.0 | App errors |
@@ -45,7 +47,7 @@ This repository is MIT. These dependencies keep their own licenses.
 | `rfd` | MIT | Native file dialogs |
 | `muda` | MIT OR Apache-2.0 | Native menus |
 | `secrecy` | MIT OR Apache-2.0 | Password wrapper |
-| `sha2` | MIT OR Apache-2.0 | Test hashes |
+| `sha2` | MIT OR Apache-2.0 | Test and release hashes |
 
 Some crates offer a choice of licenses. The project elects MIT or Apache-2.0,
 never LGPL. `r-efi` is triple-licensed as MIT, Apache-2.0 or LGPL-2.1-or-later

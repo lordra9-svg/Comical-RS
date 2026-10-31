@@ -13,14 +13,14 @@ planned item as a contract until it has tests and a spec section.
 | M3 image pipeline | Done | `comical-image` |
 | M4–M5 desktop UI | Done | `comical-app` (toolbar, thumbs, rotation, RTL, settings) |
 | Memory budgets | Done | `comical-app/src/cache.rs` (byte-budgeted LRU) |
-| CI | Done | `.github/workflows/ci.yml`, `scripts/ci.sh` |
+| CI | Done | `.github/workflows/ci.yml`, `xtask ci` |
 | M7 EXIF orientation | Done | `comical-image/src/decode.rs` (nom-exif) |
 | M8 Webtoon mode (data model) | Done | `comical-core/src/spread.rs` (`ViewMode::Webtoon`) |
 | M9 parallel prefetch | Done | `comical-app/src/app.rs` (rayon prefetch_around) |
 | M10 WebP/AVIF decode | Done | `comical-image/Cargo.toml` (image features) |
 | M11 fuzz targets | Done | `fuzz/fuzz_targets/` (archive, decode, navigation) |
 | Real archive corpus | In progress | `tests/corpus/` Info-ZIP + 7-Zip; RAR writer samples open |
-| M12 packaging | Done (scaffolding) | `scripts/release.sh`, `CHANGELOG.md`, cargo-deb metadata; installers/signing/legal pending |
+| M12 packaging | Done (scaffolding) | `xtask release`, `CHANGELOG.md`, cargo-deb metadata; installers/signing/legal pending |
 
 ## M3: image pipeline
 
@@ -122,13 +122,11 @@ first spread, LTR and RTL. Expand it before implementing the UI screen mapping.
 Matrix for Windows, macOS and Linux is in `.github/workflows/ci.yml`:
 
 ```text
-cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test
+cargo run -p xtask -- ci
 ```
 
-`scripts/ci.sh` mirrors the same gate locally. A failure on any OS is a release
-blocker until explained.
+CI and a local run stand on the same `xtask` gate. A failure on any OS is a
+release blocker until explained.
 
 ### Real archive corpus
 
@@ -148,7 +146,7 @@ Still open:
 - Duplicate names.
 
 Keep copyrighted samples outside the repository. Regenerate with
-`./scripts/regen-corpus.sh`.
+`cargo run -p xtask -- regen-corpus`.
 
 ### Fuzzing
 

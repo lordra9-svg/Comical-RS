@@ -327,13 +327,18 @@ Invariants:
 
 ## `xtask`
 
-Development-only fixture generator. Never shipped.
+Development-only tooling. Never shipped.
 
 | File | Owns |
 |---|---|
-| `Cargo.toml` | Writer features for `zip`, `rars`, `sevenz-rust` |
+| `Cargo.toml` | Writer features for `zip`, `rars`, `sevenz-rust`; `clap`, `tar`, `flate2`, `sha2` for the commands |
 | `src/lib.rs` | ZIP, RAR and 7z fixture writers; CP437 manual ZIP; sample set |
-| `src/main.rs` | Generates a directory of fixtures for manual testing |
+| `src/main.rs` | `clap` dispatcher; keeps the bare-path fixture invocation working |
+| `src/fixtures.rs` | Writes the synthetic fixture set into a directory |
+| `src/ci.rs` | The local gate: formatting check, clippy with warnings denied, workspace tests |
+| `src/corpus.rs` | `regen-corpus`: page stubs, Info-ZIP and 7-Zip runs, truncation, manifest |
+| `src/release.rs` | `release`: linux binary and tarball, deb, Windows cross build, macOS bundle, checksums |
+| `src/tool.rs` | External command and `cargo` helpers |
 
 Key symbols:
 

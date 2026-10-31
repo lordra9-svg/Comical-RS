@@ -56,7 +56,7 @@ cargo run -p comical-cli -- extract path\to\book.cbr 0 out.bin --password secret
 Generate fixtures:
 
 ```text
-cargo run -p xtask -- target/fixtures
+cargo run -p xtask -- fixtures target/fixtures
 ```
 
 Run the viewer:

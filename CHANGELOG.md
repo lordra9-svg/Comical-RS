@@ -5,6 +5,13 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- Repository tooling is Rust only. The `scripts/` shell scripts became the
+  `ci`, `release` and `regen-corpus` subcommands of the `xtask` crate, which
+  removes the bash and Python dependency and behaves the same on Windows,
+  macOS and Linux. `cargo run -p xtask -- fixtures <dir>` still writes the
+  synthetic fixtures.
+
 ## [0.2.0] — 2026-10-31
 
 ### Added

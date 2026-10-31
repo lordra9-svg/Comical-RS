@@ -23,7 +23,7 @@ Additional top-level directories:
 - `tests/vectors/` — Golden image and UI test vectors
 - `tests/corpus/` — Real-world archive fixtures (Info-ZIP, 7-Zip)
 - `docs/` — Roadmap, app notes, provenance
-- `scripts/` — CI gate, corpus regeneration shell scripts
+- `xtask/` — the one Rust tool crate: fixture writing, the CI gate, corpus regeneration and release packaging
 
 ## Key design decisions
 
