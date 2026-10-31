@@ -48,8 +48,14 @@ if [[ "$(uname)" == "MINGW"* ]] || [[ "$(uname)" == "CYGWIN"* ]] || [[ "${CARGO_
     else
         echo "[windows-msi] SKIP: cargo-wix not installed (cargo install cargo-wix)"
     fi
+elif rustup target list --installed 2>/dev/null | grep -qx 'x86_64-pc-windows-gnu' \
+    && command -v x86_64-w64-mingw32-gcc &>/dev/null; then
+    # Cross-compile from Linux with a mingw-w64 toolchain on PATH.
+    echo "[windows] cargo build --release --target x86_64-pc-windows-gnu (cross)"
+    cargo build --release -p comical-app --bin comical --target x86_64-pc-windows-gnu
+    cp target/x86_64-pc-windows-gnu/release/comical.exe "${TARGET_DIR}/comical-windows-x86_64.exe"
 else
-    echo "[windows] SKIP: not on Windows and cross-compile not configured"
+    echo "[windows] SKIP: not on Windows and no mingw-w64 cross toolchain on PATH"
 fi
 
 # macOS .app bundle (requires cargo-bundle)

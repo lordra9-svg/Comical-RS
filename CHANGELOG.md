@@ -44,6 +44,11 @@ All notable changes to Comical-RS are documented here. Format follows
   it cannot.
 - Release packaging also emits a Linux tarball and `SHA256SUMS.txt` so the
   upload can be verified.
+- The Windows executable links as a GUI subsystem program, so starting the
+  viewer no longer opens an extra console window behind it.
+- `scripts/release.sh` cross-compiles the Windows executable on Linux when a
+  mingw-w64 toolchain and the `x86_64-pc-windows-gnu` target are available,
+  instead of only ever building it on Windows.
 
 ### Known gaps
 - RAR writer corpus samples missing (no WinRAR/rarcli on corpus host)
