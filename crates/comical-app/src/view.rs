@@ -1,7 +1,7 @@
 //! Canvas drawing: black background, centered page image(s), pan support,
 //! error display, and the "Open a book" button when no book is loaded.
 
-use comical_core::{Direction, PagePart, PageRef, Size, Spread, compute_zoom_with_neighbors};
+use comical_core::{Direction, PagePart, PageRef, Size, Spread, ViewMode, compute_zoom_with_neighbors};
 use eframe::egui::{
     Align2, Color32, Context, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2,
 };
@@ -53,9 +53,18 @@ fn draw_welcome(ui: &mut eframe::egui::Ui, app: &mut App) {
 }
 
 fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
-    let Some(mut spread) = app.current_spread() else {
+    let Some(spread) = app.current_spread() else {
         return;
     };
+
+    // Webtoon mode uses a completely different rendering path: continuous
+    // vertical scroll through all pages instead of discrete spreads.
+    if app.zoom().mode == ViewMode::Webtoon {
+        draw_webtoon(ctx, ui, app);
+        return;
+    }
+
+    let mut spread = spread;
     let canvas_rect = ui.max_rect();
     let ppp = ctx.pixels_per_point().max(f32::EPSILON);
     app.update_scrollbar(ppp);
@@ -290,6 +299,204 @@ fn draw_book(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
             Color32::from_gray(160),
         );
     }
+
+    if let Some(error) = app.error() {
+        painter.text(
+            canvas_rect.left_top() + Vec2::new(12.0, 12.0),
+            Align2::LEFT_TOP,
+            format!("Error: {error}"),
+            FontId::proportional(14.0),
+            Color32::LIGHT_RED,
+        );
+    }
+}
+
+/// Gap between pages in webtoon mode, in logical points.
+const WEBTOON_GAP_PTS: f32 = 4.0;
+
+/// Layout entry for one page in the webtoon strip.
+struct WebtoonPageLayout {
+    /// Book-order page index.
+    page: usize,
+    /// Y offset of this page's top edge within the strip content, in points.
+    y_offset: f32,
+    /// Scaled width in points.
+    width: f32,
+    /// Scaled height in points.
+    height: f32,
+}
+
+/// Continuous vertical scroll renderer for webtoon mode.
+///
+/// All pages are laid out in a single vertical strip, each scaled to fit the
+/// viewport width. Only pages whose rects intersect the visible viewport are
+/// decoded and uploaded, keeping memory bounded regardless of book length.
+fn draw_webtoon(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
+    let canvas_rect = ui.max_rect();
+    let ppp = ctx.pixels_per_point().max(f32::EPSILON);
+    app.update_scrollbar(ppp);
+    let options = app.zoom();
+    let total = app.page_count();
+    if total == 0 {
+        return;
+    }
+
+    let gap = WEBTOON_GAP_PTS;
+    let viewport_width_pts = canvas_rect.width();
+
+    // Build the strip layout: compute y_offset, width and height for every page.
+    // Pages that haven't been probed yet get a placeholder aspect ratio of 2:3
+    // (portrait comic standard) so the strip has a stable shape before decode.
+    let mut layouts: Vec<WebtoonPageLayout> = Vec::with_capacity(total);
+    let mut cursor_y: f32 = 0.0;
+    for page in 0..total {
+        let natural = app.page_size(page).ok();
+        let (w_pts, h_pts) = match natural {
+            Some(size) => {
+                let scale = viewport_width_pts / (size.width as f32 / ppp);
+                let w = viewport_width_pts;
+                let h = (size.height as f32 / ppp) * scale;
+                (w, h)
+            }
+            None => {
+                // Placeholder: assume 2:3 portrait until decoded.
+                let w = viewport_width_pts;
+                let h = w * 1.5;
+                (w, h)
+            }
+        };
+        layouts.push(WebtoonPageLayout {
+            page,
+            y_offset: cursor_y,
+            width: w_pts,
+            height: h_pts,
+        });
+        cursor_y += h_pts + gap;
+    }
+    let strip_height = if layouts.is_empty() {
+        0.0
+    } else {
+        cursor_y - gap
+    };
+
+    // Drag to pan vertically. Horizontal pan is clamped to zero since the
+    // strip always fits the viewport width.
+    let response = ui.allocate_rect(canvas_rect, Sense::drag());
+    if response.dragged() {
+        let delta = response.drag_delta();
+        let (_, y) = app.pan();
+        app.set_pan((0.0, y + delta.y));
+    }
+
+    // Clamp vertical pan so the strip never scrolls past its bounds.
+    let max_scroll = (strip_height - canvas_rect.height()).max(0.0);
+    let (_, raw_y) = app.pan();
+    let clamped_y = raw_y.clamp(-max_scroll, 0.0);
+    if clamped_y != raw_y {
+        app.set_pan((0.0, clamped_y));
+    }
+    let pan_y = clamped_y;
+
+    // Determine which pages are visible (or within a margin for prefetch).
+    let margin = canvas_rect.height() * 0.5;
+    let _vis_top = -pan_y - margin;
+    let _vis_bottom = -pan_y + canvas_rect.height() + margin;
+
+    let painter = ui.painter().with_clip_rect(canvas_rect);
+    let center_x = canvas_rect.left() + viewport_width_pts / 2.0;
+
+    // Track the page closest to the top of the viewport for thumbnail sync.
+    let mut closest_page: Option<usize> = None;
+    let mut closest_dist = f32::MAX;
+
+    for layout in &layouts {
+        let page_top = layout.y_offset + pan_y;
+        let page_bottom = page_top + layout.height;
+
+        // Skip pages entirely outside the visible region plus margin.
+        if page_bottom < canvas_rect.top() - margin || page_top > canvas_rect.bottom() + margin {
+            continue;
+        }
+
+        let page_rect = Rect::from_min_size(
+            Pos2::new(center_x - layout.width / 2.0, canvas_rect.top() + page_top),
+            Vec2::new(layout.width, layout.height),
+        );
+
+        // Request texture upload for visible pages. The LRU cache and background
+        // decoder handle eviction and async decode transparently.
+        match app.texture(ctx, layout.page, PagePart::Full) {
+            Ok(handle) => {
+                painter.image(handle.id(), page_rect, uv_full(), Color32::WHITE);
+            }
+            Err(_) => {
+                let clipped = page_rect.intersect(canvas_rect);
+                if clipped.width() > 0.0 && clipped.height() > 0.0 {
+                    let page_painter = painter.with_clip_rect(clipped);
+                    page_painter.rect_filled(page_rect, 0.0, Color32::from_gray(18));
+                    page_painter.rect_stroke(
+                        page_rect,
+                        0.0,
+                        Stroke::new(1.0_f32, Color32::DARK_GRAY),
+                        StrokeKind::Inside,
+                    );
+                }
+            }
+        }
+
+        // Track which page is nearest the viewport top for current-page display.
+        let dist = (layout.y_offset + pan_y).abs();
+        if dist < closest_dist {
+            closest_dist = dist;
+            closest_page = Some(layout.page);
+        }
+    }
+
+    // Sync the spread state to the page nearest the viewport top so the
+    // thumbnail browser highlights the correct row and page labels update.
+    if let Some(page) = closest_page {
+        let current = app.current_spread().map(|s| s.left.page).unwrap_or(0);
+        if page != current {
+            app.go_to_page(page);
+        }
+    }
+
+    // Vertical scrollbar indicator.
+    let sb_thickness = options.scrollbar as f32 / ppp;
+    if strip_height > canvas_rect.height() {
+        let track_x = canvas_rect.right() - sb_thickness;
+        let track = Rect::from_min_max(
+            Pos2::new(track_x, canvas_rect.top()),
+            Pos2::new(canvas_rect.right(), canvas_rect.bottom()),
+        );
+        painter.rect_filled(track, 0.0, Color32::from_gray(32));
+
+        let scrollable = strip_height - canvas_rect.height();
+        let view_ratio = canvas_rect.height() / strip_height;
+        let thumb_height = (canvas_rect.height() * view_ratio).max(20.0);
+        let scroll_frac = if scrollable > 0.0 {
+            (-pan_y) / scrollable
+        } else {
+            0.0
+        };
+        let thumb_y = canvas_rect.top() + scroll_frac * (canvas_rect.height() - thumb_height);
+        let thumb = Rect::from_min_max(
+            Pos2::new(track_x, thumb_y),
+            Pos2::new(canvas_rect.right(), thumb_y + thumb_height),
+        );
+        painter.rect_filled(thumb, 0.0, Color32::from_gray(96));
+    }
+
+    // Page label at the bottom center.
+    let label_page = closest_page.unwrap_or(0) + 1;
+    let label_y = canvas_rect.bottom() - 18.0;
+    painter.text(
+        Pos2::new(canvas_rect.center().x, label_y),
+        Align2::CENTER_BOTTOM,
+        format!("{label_page} of {total}"),
+        FontId::proportional(13.0),
+        Color32::from_gray(160),
+    );
 
     if let Some(error) = app.error() {
         painter.text(
