@@ -37,7 +37,7 @@ App
   book_key: String                     canonical path, used by remember_page
   pending_password_path: Option<String>
                                         open attempt waiting for a password
-  password_prompt_open: bool           password prompt window state
+  password_input: String              persistent prompt text across frames
 
 OpenedBook
   pages: Vec<PageEntry>

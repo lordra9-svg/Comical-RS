@@ -22,6 +22,8 @@ pub(crate) fn open(
 
     // sevenz-rust walks decoded folders in order and then files without a
     // stream. Record that exact callback order so a page can be located later.
+    // The order must include entries that are later skipped (directories,
+    // zero-byte files), because the reader still yields them to the callback.
     let order = callback_order(archive);
     let mut ordinal = vec![None; archive.files.len()];
     for (position, file_index) in order.iter().copied().enumerate() {
@@ -31,13 +33,19 @@ pub(crate) fn open(
     }
 
     let mut candidates = Vec::new();
+    let mut original_names = std::collections::HashMap::new();
     for (file_index, entry) in archive.files.iter().enumerate() {
-        if entry.is_directory() || !is_image_name(&entry.name) {
+        if entry.is_directory()
+            || !entry.has_stream
+            || entry.size == 0
+            || !is_image_name(&entry.name)
+        {
             continue;
         }
         let Some(position) = ordinal.get(file_index).copied().flatten() else {
             continue;
         };
+        original_names.insert(position, entry.name.clone());
         candidates.push(Candidate {
             name: entry.name.clone(),
             size: entry.size,
@@ -49,11 +57,16 @@ pub(crate) fn open(
     if let Some(error) = page_count_error(&pages) {
         return Err(error);
     }
+    let source_names = sources
+        .iter()
+        .map(|position| original_names.get(position).cloned().unwrap_or_default())
+        .collect();
 
     Ok(Box::new(SevenZBook {
         path: path.to_path_buf(),
         pages,
         sources,
+        source_names,
         password: options.password.map(str::to_owned),
     }))
 }
@@ -64,12 +77,7 @@ fn callback_order(archive: &sevenz_rust::Archive) -> Vec<usize> {
         let start = archive.stream_map.folder_first_file_index[folder_index];
         let count = archive.folders[folder_index].num_unpack_sub_streams;
         for file_index in start..start.saturating_add(count) {
-            if let Some(file) = archive.files.get(file_index)
-                && file.has_stream
-                && file.size > 0
-            {
-                order.push(file_index);
-            }
+            order.push(file_index);
         }
     }
     for (file_index, _) in archive.files.iter().enumerate() {
@@ -91,6 +99,11 @@ struct SevenZBook {
     path: PathBuf,
     pages: Vec<PageEntry>,
     sources: Vec<usize>,
+    /// Original archive names in `sources` order.
+    ///
+    /// `select_pages` may strip a common wrapper directory from the public
+    /// page names, so the on-disk name cannot be reconstructed from `pages`.
+    source_names: Vec<String>,
     password: Option<String>,
 }
 
@@ -113,7 +126,11 @@ impl ComicArchive for SevenZBook {
             SevenZReader::open(&self.path, Password::from(password)).map_err(map_read_error)?;
 
         let target = self.sources[index];
-        let expected = page.name.clone();
+        let expected = self
+            .source_names
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| page.name.clone());
         let mut seen = 0usize;
         let mut found = None;
         let mut overflow = false;

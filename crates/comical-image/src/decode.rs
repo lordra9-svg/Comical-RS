@@ -1,4 +1,4 @@
-//! Decoding PNG, JPEG and GIF bytes to opaque RGB8.
+//! Decoding PNG, JPEG, GIF and WebP bytes to opaque RGB8.
 
 use std::io::Cursor;
 
@@ -12,7 +12,7 @@ use crate::{ImageError, RgbImage};
 /// output.
 pub const MAX_DECODED_PIXELS: u64 = 100_000_000;
 
-/// Reads the pixel dimensions of PNG, JPEG or GIF bytes without decoding the
+/// Reads the pixel dimensions of PNG, JPEG, GIF or WebP bytes without decoding the
 /// image data.
 ///
 /// When `apply_exif` is true and the image carries an EXIF orientation tag,
@@ -73,7 +73,10 @@ fn format_and_dimensions(bytes: &[u8]) -> Result<(image::ImageFormat, u32, u32),
         .map_err(|_| ImageError::UnsupportedFormat("unrecognised image data".to_owned()))?;
     if !matches!(
         format,
-        image::ImageFormat::Png | image::ImageFormat::Jpeg | image::ImageFormat::Gif
+        image::ImageFormat::Png
+            | image::ImageFormat::Jpeg
+            | image::ImageFormat::Gif
+            | image::ImageFormat::WebP
     ) {
         return Err(ImageError::UnsupportedFormat(format!("{format:?}")));
     }
@@ -93,7 +96,7 @@ fn format_and_dimensions(bytes: &[u8]) -> Result<(image::ImageFormat, u32, u32),
     Ok((format, width, height))
 }
 
-/// Decodes PNG, JPEG or GIF bytes to an opaque RGB image.
+/// Decodes PNG, JPEG, GIF or WebP bytes to an opaque RGB image.
 ///
 /// When `apply_exif` is true and the image carries an EXIF orientation tag,
 /// the decoded pixels are rotated to match before returning. Alpha is ignored,

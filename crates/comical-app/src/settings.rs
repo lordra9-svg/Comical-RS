@@ -207,7 +207,22 @@ impl Settings {
             return;
         }
         drop(file);
-        if let Err(error) = fs::rename(&tmp_path, &path) {
+        let rename = fs::rename(&tmp_path, &path);
+        #[cfg(windows)]
+        let rename = match rename {
+            Err(error)
+                if error.kind() == std::io::ErrorKind::AlreadyExists
+                    || error.kind() == std::io::ErrorKind::PermissionDenied =>
+            {
+                // Windows cannot atomically replace an existing file. Removing
+                // the old settings first is still better than losing the save
+                // entirely; the next launch falls back to defaults if the
+                // second rename fails.
+                fs::remove_file(&path).and_then(|()| fs::rename(&tmp_path, &path))
+            }
+            other => other,
+        };
+        if let Err(error) = rename {
             eprintln!(
                 "comical: failed to rename {} to {}: {error}",
                 tmp_path.display(),

@@ -9,7 +9,7 @@ All notable changes to Comical-RS are documented here. Format follows
 - M12 packaging scaffolding: release build script, CHANGELOG, cargo-deb/cargo-wix/cargo-bundle configs
 - ARCHITECTURE.md and .cursorrules for LLM co-development alignment
 - M11 fuzz targets for archive open, image decode and spread navigation
-- M10 WebP and AVIF decode support via image crate features
+- M10 WebP decode support via image crate features
 - M9 parallel page prefetch with rayon (prefetch_around)
 - M8 ViewMode::Webtoon data model, navigation, settings serialization and UI radio button
 - M7 EXIF orientation applied during decode and probe_size via nom-exif

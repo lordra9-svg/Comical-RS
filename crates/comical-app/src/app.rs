@@ -82,6 +82,8 @@ struct DecodeResult {
     name: String,
     /// An encrypted entry needed a password the prompt has not asked for yet.
     password_required: bool,
+    /// A non-password read or decode failure, shown on the page placeholder.
+    error: Option<String>,
 }
 
 /// Work sent to the background thumbnail thread.
@@ -130,6 +132,10 @@ struct OpenedBook {
     thumb_tx: Sender<ThumbRequest>,
     /// Receives completed thumbnails from the background worker.
     thumb_rx: Receiver<ThumbResult>,
+    /// Receives natural-size pages decoded by the rayon prefetch task.
+    prefetch_rx: Receiver<(usize, RgbImage)>,
+    /// Sends natural-size pages from the rayon prefetch task back to the UI.
+    prefetch_tx: Sender<(usize, RgbImage)>,
     /// Resampling filter for pages that have to be scaled.
     filter: Filter,
     /// Whether to apply EXIF orientation when probing and decoding pages.
@@ -151,11 +157,13 @@ impl OpenedBook {
         let count = pages.len();
         let (decode_tx, worker_rx) = unbounded::<DecodeRequest>();
         let (worker_tx, decode_rx) = unbounded::<DecodeResult>();
+        let (prefetch_tx, prefetch_rx) = unbounded::<(usize, RgbImage)>();
         let generation = Arc::new(AtomicU64::new(0));
         let archive = Arc::new(Mutex::new(archive));
 
         let worker_archive = Arc::clone(&archive);
         let worker_generation = Arc::clone(&generation);
+        let worker_exif = exif_orientation;
         thread::Builder::new()
             .name("comical-decode".to_owned())
             .spawn(move || {
@@ -166,7 +174,7 @@ impl OpenedBook {
                     if req.generation != worker_generation.load(Ordering::Relaxed) {
                         continue;
                     }
-                    let result = decode_request(&worker_archive, &req);
+                    let result = decode_request(&worker_archive, &req, worker_exif);
                     if worker_tx.send(result).is_err() {
                         break;
                     }
@@ -177,11 +185,12 @@ impl OpenedBook {
         let (thumb_tx, thumb_worker_rx) = bounded::<ThumbRequest>(THUMB_QUEUE);
         let (thumb_worker_tx, thumb_rx) = unbounded::<ThumbResult>();
         let thumb_archive = Arc::clone(&archive);
+        let thumb_exif = exif_orientation;
         thread::Builder::new()
             .name("comical-thumb".to_owned())
             .spawn(move || {
                 while let Ok(req) = thumb_worker_rx.recv() {
-                    let result = decode_thumbnail(&thumb_archive, req.page);
+                    let result = decode_thumbnail(&thumb_archive, req.page, thumb_exif);
                     if thumb_worker_tx.send(result).is_err() {
                         break;
                     }
@@ -205,6 +214,8 @@ impl OpenedBook {
             thumb_pending: std::collections::HashSet::new(),
             thumb_tx,
             thumb_rx,
+            prefetch_rx,
+            prefetch_tx,
             filter,
             exif_orientation,
             password_required: false,
@@ -334,6 +345,16 @@ impl OpenedBook {
             });
         }
 
+        // A prefetched page is already decoded at natural size. Rendering it
+        // here is cheaper than queueing the same decode again and keeps the
+        // prefetch from being wasted work.
+        if let Some(image) = self.natural.get(&page).cloned() {
+            let rendered = render_page(image, key);
+            let handle = ctx.load_texture(texture_name(key), rendered, TextureOptions::LINEAR);
+            self.textures.put(key, handle.clone());
+            return Ok(handle);
+        }
+
         if !self.pending.contains(&key) {
             let request = DecodeRequest {
                 key,
@@ -396,9 +417,19 @@ impl OpenedBook {
             if result.password_required {
                 self.password_required = true;
             }
+            if let Some(message) = result.error {
+                // A non-password failure is permanent for this page. Record it
+                // so the reader shows a diagnostic instead of a black page and
+                // the page is not retried every frame.
+                self.record_page_error(result.key.page, message);
+                continue;
+            }
             let handle = ctx.load_texture(result.name, result.image, TextureOptions::LINEAR);
             self.textures.put(result.key, handle);
             uploaded = true;
+        }
+        while let Ok((page, image)) = self.prefetch_rx.try_recv() {
+            self.natural.put(page, image);
         }
         while let Ok(result) = self.thumb_rx.try_recv() {
             self.thumb_pending.remove(&result.page);
@@ -426,6 +457,7 @@ impl OpenedBook {
         let end = (current + PREFETCH_RADIUS + 1).min(self.pages.len());
         let archive = Arc::clone(&self.archive);
         let exif = self.exif_orientation;
+        let sender = self.prefetch_tx.clone();
         let pages: Vec<usize> = (start..end).filter(|&p| p != current).collect();
         rayon::spawn(move || {
             for page in pages {
@@ -438,8 +470,17 @@ impl OpenedBook {
                     Err(_) => continue,
                 };
                 drop(guard);
-                // Decode is pure CPU work; rayon handles scheduling.
-                let _ = decode(&bytes, exif);
+                // Decode is pure CPU work; rayon handles scheduling. Results
+                // are handed back to the UI thread so the natural-size cache
+                // actually benefits from the prefetch.
+                match decode(&bytes, exif) {
+                    Ok(image) => {
+                        if sender.send((page, image)).is_err() {
+                            return;
+                        }
+                    }
+                    Err(_) => continue,
+                }
             }
         });
     }
@@ -452,11 +493,9 @@ impl OpenedBook {
 fn decode_request(
     archive: &Arc<Mutex<Box<dyn ComicArchive + Send>>>,
     req: &DecodeRequest,
+    exif_orientation: bool,
 ) -> DecodeResult {
-    let name = format!(
-        "page-{}-{:?}-{:?}",
-        req.key.page, req.key.part, req.key.rotation
-    );
+    let name = texture_name(req.key);
 
     let bytes = match archive
         .lock()
@@ -467,51 +506,77 @@ fn decode_request(
         Err(error) => {
             // Encrypted entries list without a password but fail at read
             // time; report that so the app can offer the password prompt.
-            return placeholder_result(req, name, error.is_password_required());
+            let password_required = error.is_password_required();
+            return placeholder_result(
+                req,
+                name,
+                password_required,
+                (!password_required).then(|| error.to_string()),
+            );
         }
     };
 
-    let decoded = match decode(&bytes, false) {
+    let decoded = match decode(&bytes, exif_orientation) {
         Ok(image) => image,
-        Err(_) => return placeholder_result(req, name, false),
+        Err(error) => {
+            return placeholder_result(req, name, false, Some(error.to_string()));
+        }
     };
 
-    let rotated = if req.key.rotation != Rotation::North {
-        image_rotate(&decoded, rotation_to_image(req.key.rotation))
+    let image = render_page(decoded, req.key);
+    DecodeResult {
+        key: req.key,
+        generation: req.generation,
+        image,
+        name,
+        password_required: false,
+        error: None,
+    }
+}
+
+/// Human-readable texture name for a decoded page part.
+fn texture_name(key: TextureKey) -> String {
+    format!("page-{}-{:?}-{:?}", key.page, key.part, key.rotation)
+}
+
+/// Rotates, crops and caps a decoded page for upload as one texture.
+fn render_page(decoded: RgbImage, key: TextureKey) -> ColorImage {
+    let rotated = if key.rotation != Rotation::North {
+        image_rotate(&decoded, rotation_to_image(key.rotation))
     } else {
         decoded
     };
 
-    let image = if req.key.part == PagePart::Full {
+    let image = if key.part == PagePart::Full {
         rotated
     } else {
-        crop_part(&rotated, req.key.part).unwrap_or(rotated)
+        crop_part(&rotated, key.part).unwrap_or(rotated)
     };
 
     let (width, height) = capped_dimensions(image.width(), image.height());
     let image = if width == image.width() && height == image.height() {
         image
     } else {
-        resize(&image, width, height, req.key.filter).unwrap_or(image)
+        resize(&image, width, height, key.filter).unwrap_or(image)
     };
 
     let size = [image.width() as usize, image.height() as usize];
-    DecodeResult {
-        key: req.key,
-        generation: req.generation,
-        image: ColorImage::from_rgb(size, image.pixels()),
-        name,
-        password_required: false,
-    }
+    ColorImage::from_rgb(size, image.pixels())
 }
 
-fn placeholder_result(req: &DecodeRequest, name: String, password_required: bool) -> DecodeResult {
+fn placeholder_result(
+    req: &DecodeRequest,
+    name: String,
+    password_required: bool,
+    error: Option<String>,
+) -> DecodeResult {
     DecodeResult {
         key: req.key,
         generation: req.generation,
         image: ColorImage::from_rgb([1, 1], &[0, 0, 0]),
         name,
         password_required,
+        error,
     }
 }
 
@@ -532,6 +597,7 @@ fn capped_dimensions(width: u32, height: u32) -> (u32, u32) {
 fn decode_thumbnail(
     archive: &Arc<Mutex<Box<dyn ComicArchive + Send>>>,
     page: usize,
+    exif_orientation: bool,
 ) -> ThumbResult {
     let name = format!("thumb-{page}");
     let bytes = match archive
@@ -548,7 +614,7 @@ fn decode_thumbnail(
             };
         }
     };
-    let decoded = match decode(&bytes, false) {
+    let decoded = match decode(&bytes, exif_orientation) {
         Ok(image) => image,
         Err(_) => {
             return ThumbResult {
@@ -616,8 +682,9 @@ pub struct App {
     book_key: String,
     /// Book whose open attempt asked for a password, if any.
     pending_password_path: Option<String>,
-    /// Whether the password prompt window is currently open.
-    password_prompt_open: bool,
+    /// Password typed into the prompt. Kept across frames because egui has no
+    /// per-widget storage for a borrowed buffer.
+    password_input: String,
 }
 
 impl App {
@@ -652,7 +719,7 @@ impl App {
             settings_open: false,
             book_key: String::new(),
             pending_password_path: None,
-            password_prompt_open: false,
+            password_input: String::new(),
         }
     }
 
@@ -686,6 +753,7 @@ impl App {
             Err(error) => {
                 if error.is_password_required() {
                     self.pending_password_path = Some(path.to_owned());
+                    self.password_input.clear();
                 }
                 return Err(AppError::OpenBook(error));
             }
@@ -721,6 +789,8 @@ impl App {
         self.title = title_for(path);
         self.title_dirty = true;
         self.book_key = book_key(path);
+        self.pending_password_path = None;
+        self.password_input.clear();
         if self.settings.remember_page
             && let Some(&page) = self.settings.last_pages.get(&self.book_key)
         {
@@ -750,9 +820,21 @@ impl App {
                 return false;
             }
         };
+        // Listing an archive's directory often works without the key, so a
+        // successful open does not prove the password is right. Try to read
+        // the first page before installing the book; otherwise a wrong
+        // password would appear to open and fail again on every page.
+        let mut archive = archive;
+        if !archive.pages().is_empty()
+            && let Err(error) = archive.read_page(0, DEFAULT_MAX_ENTRY_BYTES)
+            && (error.is_bad_password() || error.is_password_required())
+        {
+            self.error = Some(error.to_string());
+            return false;
+        }
         if self.install_book(&path, archive).is_ok() {
             self.pending_password_path = None;
-            self.password_prompt_open = false;
+            self.password_input.clear();
             return true;
         }
         false
@@ -761,7 +843,7 @@ impl App {
     /// Cancels the password prompt and keeps the previous book open.
     pub fn cancel_password_prompt(&mut self) {
         self.pending_password_path = None;
-        self.password_prompt_open = false;
+        self.password_input.clear();
     }
 
     /// Show a native file-open dialog and open the selected book.
@@ -850,6 +932,17 @@ impl App {
         }
         self.pan = (0.0, 0.0);
         self.invalidate_visible();
+        self.remember_current_page();
+    }
+
+    /// Updates the navigation model to the page nearest the webtoon viewport.
+    ///
+    /// Unlike [`Self::go_to_page`], this keeps the current pan so continuous
+    /// scrolling does not snap back to the top of the page.
+    pub fn sync_webtoon_page(&mut self, page: usize) {
+        if let Some(spread) = self.spread.as_mut() {
+            spread.go_to_page(page);
+        }
         self.remember_current_page();
     }
 
@@ -976,7 +1069,9 @@ impl App {
     /// A page that becomes landscape while it occupies the left slot has to
     /// restart the spread as its two halves. A landscape page in the right slot
     /// only needs its part changed to the left half, which keeps the left page
-    /// visible. When neither applies, the current spread is preserved.
+    /// visible. A page that becomes portrait again collapses any half-page
+    /// reference back to the whole page. When none of those apply, the current
+    /// spread is preserved.
     ///
     /// Returns true when the state changed and a repaint is needed.
     pub fn refresh_spread(&mut self) -> bool {
@@ -990,32 +1085,47 @@ impl App {
         let spread = state.spread();
         let mode = state.mode();
 
-        let left_changed = spread.left.part == PagePart::Full
-            && changed.contains(&spread.left.page)
-            && self
-                .orientations
-                .get(spread.left.page)
-                .is_some_and(|orientation| orientation.is_landscape());
-        if left_changed {
-            if let Ok(mut state) = SpreadState::new(self.orientations.clone(), mode) {
-                state.go_to_page(spread.left.page);
-                self.spread = Some(state);
-                self.invalidate_visible();
-                return true;
+        let mut updated = spread;
+        let left_page = updated.left.page;
+        let left_landscape = self
+            .orientations
+            .get(left_page)
+            .is_some_and(|orientation| orientation.is_landscape());
+        if changed.contains(&left_page) {
+            if left_landscape && updated.left.part == PagePart::Full {
+                if let Ok(mut state) = SpreadState::new(self.orientations.clone(), mode) {
+                    state.go_to_page(left_page);
+                    self.spread = Some(state);
+                    self.invalidate_visible();
+                    return true;
+                }
+                return false;
             }
-            return false;
+            if !left_landscape && updated.left.part != PagePart::Full {
+                updated.left = PageRef::new(left_page, PagePart::Full);
+                if updated.right.is_some_and(|right| right.page == left_page) {
+                    updated.right = None;
+                }
+            }
         }
 
-        let mut updated = spread;
         if let Some(right) = updated.right
-            && right.part == PagePart::Full
             && changed.contains(&right.page)
-            && self
+        {
+            let right_landscape = self
                 .orientations
                 .get(right.page)
-                .is_some_and(|orientation| orientation.is_landscape())
-        {
-            updated.right = Some(PageRef::new(right.page, PagePart::Left));
+                .is_some_and(|orientation| orientation.is_landscape());
+            if right_landscape && right.part == PagePart::Full {
+                updated.right = Some(PageRef::new(right.page, PagePart::Left));
+            } else if !right_landscape && right.part != PagePart::Full {
+                if right.page == updated.left.page {
+                    updated.left = PageRef::new(right.page, PagePart::Full);
+                    updated.right = None;
+                } else {
+                    updated.right = Some(PageRef::new(right.page, PagePart::Full));
+                }
+            }
         }
 
         match SpreadState::with_spread(self.orientations.clone(), mode, updated) {
@@ -1115,46 +1225,43 @@ impl App {
     ///
     /// Returns `true` while the prompt is open, so the frame can be scheduled.
     pub fn draw_password_prompt(&mut self, ctx: &Context) -> bool {
-        if self.pending_password_path.is_none() {
+        let Some(path) = self.pending_password_path.clone() else {
             return false;
-        }
-        let mut open = self.password_prompt_open;
-        let response = egui::Window::new("Password required")
+        };
+        let mut open = true;
+        let mut submitted: Option<String> = None;
+        let mut cancel = false;
+        egui::Window::new("Password required")
             .id(egui::Id::new("comical-password-prompt"))
             .collapsible(false)
             .resizable(false)
             .open(&mut open)
             .show(ctx, |ui| {
-                let Some(path) = self.pending_password_path.clone() else {
-                    return;
-                };
-                ui.label(format!("This archive is encrypted: {}", path));
-                let mut password = String::new();
-                ui.add(
-                    egui::TextEdit::singleline(&mut password)
+                ui.label(format!("This archive is encrypted: {path}"));
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut self.password_input)
                         .password(true)
                         .hint_text("Password")
                         .desired_width(280.0),
                 );
-                if ui.button("Open").clicked() {
-                    let password = std::mem::take(&mut password);
-                    self.submit_password(&password);
+                if !response.has_focus() && !response.lost_focus() {
+                    response.request_focus();
+                }
+                let entered =
+                    response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+                if ui.button("Open").clicked() || entered {
+                    submitted = Some(self.password_input.clone());
                 }
                 if ui.button("Cancel").clicked() {
-                    self.cancel_password_prompt();
+                    cancel = true;
                 }
             });
-        let open_flag = response.is_some();
-        if !self.pending_password_path.is_some() {
-            // A submit or cancel cleared the prompt during this frame.
-            self.password_prompt_open = false;
-        } else {
-            self.password_prompt_open = open_flag;
+        if let Some(password) = submitted {
+            self.submit_password(&password);
+        } else if cancel || !open {
+            self.cancel_password_prompt();
         }
-        if !self.password_prompt_open {
-            self.pending_password_path = None;
-        }
-        self.pending_password_path.is_some() && self.password_prompt_open
+        self.pending_password_path.is_some()
     }
 
     /// Draw the settings window if open.
@@ -1439,6 +1546,7 @@ impl App {
                 let path = self.book_key.clone();
                 if !path.is_empty() {
                     self.pending_password_path = Some(path);
+                    self.password_input.clear();
                 }
             }
         }
@@ -1632,8 +1740,58 @@ mod tests {
             },
             generation: 0,
         };
-        let result = decode_request(&archive, &request);
+        let result = decode_request(&archive, &request, false);
         assert!(result.password_required);
+    }
+
+    #[test]
+    fn submitting_the_right_password_opens_the_book() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let path = directory.path().join("book.cbz");
+        xtask::write_zip(
+            &path,
+            &[xtask::FixtureEntry::new("secret.png", b"png-bytes")],
+            xtask::ZipMethod::Deflate,
+            xtask::ZipEncryption::Aes256,
+            Some("open-sesame"),
+        )
+        .expect("write encrypted zip");
+        let book = path.to_str().expect("temp path is utf-8");
+
+        let mut app = App::with_settings(Settings::default());
+        app.pending_password_path = Some(book.to_owned());
+        assert!(!app.submit_password("wrong-password"));
+        assert_eq!(app.pending_password_path.as_deref(), Some(book));
+        assert!(!app.has_book());
+
+        assert!(app.submit_password("open-sesame"));
+        assert!(app.has_book());
+        assert!(app.pending_password_path.is_none());
+    }
+
+    #[test]
+    fn webtoon_page_sync_preserves_the_scroll_offset() {
+        let mut app = app_with_pages(vec![PageOrientation::Portrait; 4]);
+        app.set_pan((0.0, -320.0));
+        app.sync_webtoon_page(2);
+        assert_eq!(app.current_page(), Some(2));
+        assert_eq!(app.pan(), (0.0, -320.0));
+    }
+
+    #[test]
+    fn rotation_back_to_portrait_collapses_the_split_spread() {
+        let mut app = app_with_pages(vec![PageOrientation::Landscape, PageOrientation::Portrait]);
+        let spread = app.current_spread().expect("spread");
+        assert_eq!(spread.left, PageRef::new(0, PagePart::Left));
+        assert_eq!(spread.right, Some(PageRef::new(0, PagePart::Right)));
+
+        app.orientations[0] = PageOrientation::Portrait;
+        app.changed_pages.push(0);
+        assert!(app.refresh_spread());
+
+        let spread = app.current_spread().expect("spread");
+        assert_eq!(spread.left, PageRef::new(0, PagePart::Full));
+        assert!(spread.right.is_none());
     }
 
     #[test]
@@ -1652,7 +1810,6 @@ mod tests {
 
         let mut app = App::with_settings(Settings::default());
         app.pending_password_path = Some(book.to_owned());
-        app.password_prompt_open = true;
         app.cancel_password_prompt();
         assert!(app.pending_password_path.is_none());
         assert!(!app.submit_password("open-sesame"));

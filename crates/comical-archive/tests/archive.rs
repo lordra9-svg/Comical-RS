@@ -416,6 +416,44 @@ fn sevenz_lists_and_extracts() {
 }
 
 #[test]
+fn sevenz_wrapper_directory_is_stripped_and_pages_still_read() {
+    let directory = TempDir::new().unwrap();
+    let path = directory.path().join("wrapped.cb7");
+    let entries = [
+        FixtureEntry::new("Comic/z.png", PAGE_C),
+        FixtureEntry::new("Comic/a.png", PAGE_A),
+        FixtureEntry::new("Comic/nested/m.jpg", PAGE_B),
+    ];
+    write_7z(&path, &entries).unwrap();
+
+    let mut archive = open_path(&path);
+    assert_eq!(
+        names(archive.as_ref()),
+        vec!["a.png", "nested/m.jpg", "z.png"]
+    );
+    assert_eq!(archive.read_page(0, 1024).unwrap(), PAGE_A);
+    assert_eq!(archive.read_page(1, 1024).unwrap(), PAGE_B);
+    assert_eq!(archive.read_page(2, 1024).unwrap(), PAGE_C);
+}
+
+#[test]
+fn sevenz_zero_byte_entries_do_not_shift_page_ordinals() {
+    let directory = TempDir::new().unwrap();
+    let path = directory.path().join("empty-first.cb7");
+    let entries = [
+        FixtureEntry::new("Comic/empty.txt", b""),
+        FixtureEntry::new("Comic/first.png", PAGE_A),
+        FixtureEntry::new("Comic/second.jpg", PAGE_B),
+    ];
+    write_7z(&path, &entries).unwrap();
+
+    let mut archive = open_path(&path);
+    assert_eq!(names(archive.as_ref()), vec!["first.png", "second.jpg"]);
+    assert_eq!(archive.read_page(0, 1024).unwrap(), PAGE_A);
+    assert_eq!(archive.read_page(1, 1024).unwrap(), PAGE_B);
+}
+
+#[test]
 fn sevenz_aes256_password_is_supported_and_wrong_password_is_rejected() {
     let directory = TempDir::new().unwrap();
     let path = directory.path().join("secret.cb7");

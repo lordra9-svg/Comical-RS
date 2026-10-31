@@ -1,4 +1,4 @@
-//! Decode tests for PNG, JPEG and GIF input.
+//! Decode tests for PNG, JPEG, GIF and WebP input.
 
 use std::io::Cursor;
 
@@ -49,6 +49,16 @@ fn png_rgb_decodes_to_exact_pixels() {
         let y = index as u32 / 3;
         assert_eq!(decoded.pixel(x, y), Some(*color));
     }
+}
+
+#[test]
+fn webp_decodes_to_the_expected_pixels() {
+    let source = image::RgbImage::from_pixel(7, 5, image::Rgb([12, 200, 90]));
+    let bytes = encode(&DynamicImage::ImageRgb8(source), ImageFormat::WebP);
+    assert_eq!(probe_size(&bytes, false).expect("probe WebP"), (7, 5));
+    let decoded = decode(&bytes, false).expect("decode WebP");
+    assert_eq!((decoded.width(), decoded.height()), (7, 5));
+    assert_near(decoded.pixel(3, 2).expect("center pixel"), [12, 200, 90], 2);
 }
 
 #[test]

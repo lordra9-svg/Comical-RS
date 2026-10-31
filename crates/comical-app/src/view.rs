@@ -1,7 +1,9 @@
 //! Canvas drawing: black background, centered page image(s), pan support,
 //! error display, and the "Open a book" button when no book is loaded.
 
-use comical_core::{Direction, PagePart, PageRef, Size, Spread, ViewMode, compute_zoom_with_neighbors};
+use comical_core::{
+    Direction, PagePart, PageRef, Size, Spread, ViewMode, compute_zoom_with_neighbors,
+};
 use eframe::egui::{
     Align2, Color32, Context, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, TextureHandle, Vec2,
 };
@@ -457,7 +459,7 @@ fn draw_webtoon(ctx: &Context, ui: &mut eframe::egui::Ui, app: &mut App) {
     if let Some(page) = closest_page {
         let current = app.current_spread().map(|s| s.left.page).unwrap_or(0);
         if page != current {
-            app.go_to_page(page);
+            app.sync_webtoon_page(page);
         }
     }
 

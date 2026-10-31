@@ -9,8 +9,8 @@ license.workspace = true
 [dependencies]
 thiserror = { workspace = true }
 
-# Decode only: PNG, JPEG and GIF. Encoders and other formats stay disabled.
-image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "avif"] }
+# Decode only: PNG, JPEG, GIF and WebP. Encoders and other formats stay disabled.
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 nom-exif = "3"
 
 [dev-dependencies]

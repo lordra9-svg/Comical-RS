@@ -140,15 +140,16 @@ impl SpreadState {
         if spread.left.page >= pages.len() {
             return Err(SpreadError::InvalidSpread);
         }
-        if let Some(right) = spread.right {
-            if right.page >= pages.len() || spread.left.page > right.page {
-                return Err(SpreadError::InvalidSpread);
-            }
-            if mode == ViewMode::OnePage {
-                return Err(SpreadError::InvalidSpread);
-            }
+        if let Some(right) = spread.right
+            && (right.page >= pages.len() || spread.left.page > right.page)
+        {
+            return Err(SpreadError::InvalidSpread);
         }
-        if mode == ViewMode::OnePage && spread.left.part != PagePart::Full {
+        // One-page and webtoon layouts show exactly one full page. Two-page
+        // mode is the only mode that may carry a facing page or a split part.
+        if mode != ViewMode::TwoPage
+            && (spread.right.is_some() || spread.left.part != PagePart::Full)
+        {
             return Err(SpreadError::InvalidSpread);
         }
         Ok(Self {
@@ -385,7 +386,7 @@ fn one_page_spread(page: usize) -> Spread {
 }
 
 fn first_spread(pages: &[PageOrientation], mode: ViewMode) -> Spread {
-    if mode == ViewMode::OnePage || pages.len() == 1 {
+    if mode != ViewMode::TwoPage || pages.len() == 1 {
         return one_page_spread(0);
     }
     if pages[0].is_landscape() {
@@ -402,7 +403,7 @@ fn first_spread(pages: &[PageOrientation], mode: ViewMode) -> Spread {
 
 fn last_spread(pages: &[PageOrientation], mode: ViewMode) -> Spread {
     let last = pages.len() - 1;
-    if mode == ViewMode::OnePage || pages.len() == 1 {
+    if mode != ViewMode::TwoPage || pages.len() == 1 {
         return one_page_spread(last);
     }
     if pages[last].is_landscape() {

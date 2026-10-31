@@ -417,6 +417,54 @@ fn check_turn_sequence(pages: &[PageOrientation], sequence: &[Spread]) {
     }
 }
 
+#[test]
+fn webtoon_mode_never_splits_a_landscape_page() {
+    let pages = vec![Landscape, Portrait, Landscape];
+    let mut state = SpreadState::new(pages.clone(), ViewMode::Webtoon).unwrap();
+
+    assert_one_page(&state, 0);
+
+    state.last();
+    assert_one_page(&state, 2);
+
+    state.first();
+    assert_one_page(&state, 0);
+
+    state.next_turn();
+    assert_one_page(&state, 1);
+
+    state.go_to_page(2);
+    assert_one_page(&state, 2);
+
+    state.set_mode(ViewMode::TwoPage);
+    assert_eq!(
+        state.spread(),
+        Spread {
+            left: PageRef::new(2, PagePart::Left),
+            right: Some(PageRef::new(2, PagePart::Right)),
+        }
+    );
+
+    state.set_mode(ViewMode::Webtoon);
+    assert_one_page(&state, 2);
+}
+
+#[test]
+fn webtoon_restore_rejects_a_two_page_spread() {
+    let pages = vec![Landscape, Portrait];
+    let split = Spread {
+        left: PageRef::new(0, PagePart::Left),
+        right: Some(PageRef::new(0, PagePart::Right)),
+    };
+    assert!(SpreadState::with_spread(pages, ViewMode::Webtoon, split).is_err());
+
+    let facing = Spread {
+        left: PageRef::new(0, PagePart::Full),
+        right: Some(PageRef::new(1, PagePart::Full)),
+    };
+    assert!(SpreadState::with_spread(vec![Portrait; 2], ViewMode::Webtoon, facing).is_err());
+}
+
 fn contains(spread: Spread, page: PageRef) -> bool {
     spread.left == page || spread.right == Some(page)
 }
