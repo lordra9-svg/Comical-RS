@@ -3,18 +3,6 @@
 A behavior-compatible comic viewer for Windows, macOS (pending) and Linux. It reads ZIP,
 RAR and 7z archives and is written from a clean-room specification.
 
-## Status
-
-M6 infrastructure slice in progress. The viewer opens ZIP, RAR, 7z and directory
-books with one- and two-page spreads, zoom modes, keyboard navigation, drag pan,
-wheel pan, Ctrl+wheel zoom, fullscreen, toolbar, thumbnails, rotation, RTL,
-selectable resampling filters, optional natural page order, remembered last page,
-persistent settings and byte-budgeted page/texture caches.
-`comical-cli` lists and extracts pages. Cross-platform CI runs on Windows,
-macOS and Linux. A real-writer archive corpus under `tests/corpus/` covers
-Info-ZIP and 7-Zip fixtures (list and exact-byte extract). Packaging and release
-review are still to come.
-
 ## Usage
 
 Run the viewer on a book:
@@ -55,19 +43,6 @@ xtask/                 synthetic archive fixture generator
 
 Implementation details, file ownership and the maintenance runbook start at
 `docs/README.md`.
-
-## Milestones
-
-1. ~~Scaffold the Cargo workspace.~~
-2. ~~Implement `comical-cli probe <book>` and `extract` for ZIP, RAR and 7z.~~
-3. ~~Implement the spread state machine and zoom math in `comical-core`.~~
-4. ~~Image decoding, rotation and filters.~~
-5. ~~Minimal desktop UI: canvas, zoom modes, navigation, pan, fullscreen.~~
-6. ~~Cross-platform CI and a real archive corpus.~~ (CI live; Info-ZIP/7-Zip corpus in tree; RAR writer samples still open)
-7. Packaging and release review.
-8. Add `Clean-Room: spec-v1` to every commit.
-
-See `docs/roadmap.md` for the current plan and open decisions.
 
 ## License
 
