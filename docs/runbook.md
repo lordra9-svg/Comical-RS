@@ -262,6 +262,7 @@ Before release, generate a full dependency license report with `cargo-about` or
 
 ## Release checklist
 
+- [ ] `cargo run -p xtask -- verify target/release-dist/<version>`
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo test --workspace`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`

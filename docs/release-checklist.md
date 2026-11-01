@@ -7,6 +7,7 @@ this checklist covers everything that cannot be automated.
 
 ## Pre-release verification
 
+- [ ] `cargo run -p xtask -- verify target/release-dist/<version>` passes
 - [ ] All milestones M0–M12 pass on Windows, macOS and Linux
 - [ ] `cargo fmt --all -- --check` passes
 - [ ] `cargo clippy --all-targets -- -D warnings` passes with zero warnings

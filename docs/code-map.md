@@ -342,6 +342,7 @@ Development-only tooling. Never shipped.
 | `src/ci.rs` | The local gate: formatting check, clippy with warnings denied, workspace tests |
 | `src/corpus.rs` | `regen-corpus`: page stubs, Info-ZIP and 7-Zip runs, truncation, manifest |
 | `src/release.rs` | `release`: linux binary and tarball, deb, Windows cross build, macOS bundle, checksums |
+| `src/verify.rs` | `verify`: checksums, tarball, deb/msi containers and Windows PE headers |
 | `src/tool.rs` | External command and `cargo` helpers |
 
 Key symbols:

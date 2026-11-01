@@ -5,6 +5,14 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- `cargo run -p xtask -- verify [directory]` checks a finished release
+  directory before it is published: the checksum manifest and its coverage, the
+  Linux tarball's member, mode, ownership and bytes, the Debian and MSI
+  containers, and the Windows executable's PE machine type, GUI subsystem,
+  `.rsrc` section and required imports. `xtask release` now prints it as the
+  first next step.
+
 ### Fixed
 - The Windows build actually runs on the wgpu renderer. `eframe` was built with
   its default features, so the glow backend was still compiled in and eframe

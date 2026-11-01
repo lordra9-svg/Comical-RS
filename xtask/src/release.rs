@@ -68,10 +68,14 @@ pub fn run(version: Option<String>) -> Result<(), Box<dyn Error>> {
     }
     println!();
     println!("Next steps:");
-    println!("  1. Test each binary on its target platform");
-    println!("  2. Sign Windows/macOS binaries if applicable");
-    println!("  3. Create GitHub release with changelog and SHA256SUMS.txt");
-    println!("  4. Upload artifacts to release");
+    println!(
+        "  1. Validate the directory: cargo run -p xtask -- verify {}",
+        dist.display()
+    );
+    println!("  2. Test each binary on its target platform");
+    println!("  3. Sign Windows/macOS binaries if applicable");
+    println!("  4. Create GitHub release with changelog and SHA256SUMS.txt");
+    println!("  5. Upload artifacts to release");
     Ok(())
 }
 
@@ -318,7 +322,7 @@ fn target_installed(target: &str) -> bool {
         .any(|line| line.trim() == target)
 }
 
-fn workspace_root() -> Result<PathBuf, Box<dyn Error>> {
+pub(crate) fn workspace_root() -> Result<PathBuf, Box<dyn Error>> {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     manifest
         .parent()
@@ -327,7 +331,7 @@ fn workspace_root() -> Result<PathBuf, Box<dyn Error>> {
 }
 
 /// Reads `[workspace.package] version`, the only place the version exists.
-fn workspace_version(root: &Path) -> Result<String, Box<dyn Error>> {
+pub(crate) fn workspace_version(root: &Path) -> Result<String, Box<dyn Error>> {
     let manifest = fs::read_to_string(root.join("Cargo.toml"))?;
     let mut in_package = false;
     for line in manifest.lines() {

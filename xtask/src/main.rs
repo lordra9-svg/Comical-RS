@@ -7,13 +7,21 @@ mod corpus;
 mod fixtures;
 mod release;
 mod tool;
+mod verify;
 
 use std::error::Error;
 
 use clap::{Parser, Subcommand};
 
 /// Subcommand names, also used to keep the old bare-path invocation working.
-const COMMANDS: &[&str] = &["fixtures", "ci", "release", "regen-corpus", "help"];
+const COMMANDS: &[&str] = &[
+    "fixtures",
+    "ci",
+    "release",
+    "regen-corpus",
+    "verify",
+    "help",
+];
 
 #[derive(Debug, Parser)]
 #[command(name = "xtask", about = "Development tooling for Comical-RS")]
@@ -39,6 +47,11 @@ enum Command {
     /// Rebuild the real-writer corpus with Info-ZIP and 7-Zip.
     #[command(name = "regen-corpus")]
     RegenCorpus,
+    /// Check a finished release directory before publishing it.
+    Verify {
+        /// Release directory. Defaults to `target/release-dist/<version>`.
+        directory: Option<String>,
+    },
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -59,5 +72,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::Ci => ci::run(),
         Command::Release { version } => release::run(version),
         Command::RegenCorpus => corpus::run(),
+        Command::Verify { directory } => verify::run(directory),
     }
 }
