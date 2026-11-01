@@ -21,7 +21,7 @@ tests that protect it. Use this as the starting point when tracing a failure.
 | `tests/vectors/spreads.json` | Spread state cases |
 | `tests/vectors/zoom.json` | Zoom and fit cases |
 | `tests/vectors/ui.json` | Seed right-to-left screen mapping cases |
-| `tests/vectors/images.json` | 42 oracle-confirmed filter cases and source bytes |
+| `tests/vectors/images.json` | 42 oracle-confirmed filter cases with source and output bytes |
 
 ## Documentation
 

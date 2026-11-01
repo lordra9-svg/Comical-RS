@@ -106,8 +106,11 @@ headers that still parse, very large books, concurrent reads.
 
 `tests/images.rs` is the golden test. It reads
 `tests/vectors/images.json`, reconstructs the 17x11 source from `rgb_hex`,
-resizes every case and compares SHA-256 of the raw RGB8 output. It asserts all
-42 cases and runs in debug and release.
+resizes every case and compares SHA-256 of the raw RGB8 output. A platform that
+does not reproduce the hash falls back to the recorded output bytes, with a
+two-step channel tolerance and a 1% differing-channel limit, because the sRGB
+transfer functions use the platform `powf`. It asserts all 42 cases and runs in
+debug and release.
 
 `tests/transform.rs` covers:
 
@@ -205,15 +208,17 @@ neighbors, then assert scale within `1e-6` and exact integer dimensions.
       "name": "catmull_rom-0.5",
       "filter": "catmull_rom",
       "target": {"width": 8, "height": 5},
-      "output_sha256": "raw RGB8 output hash"
+      "output_sha256": "raw RGB8 output hash",
+      "output_rgb_hex": "raw RGB8 output bytes"
     }
   ]
 }
 ```
 
 `filter` is `box`, `bilinear`, `bicubic`, `bspline`, `catmull_rom` or
-`lanczos3`. Hashes are exact. The test reconstructs the source, resizes and
-hashes the output. Do not regenerate vectors from the Rust implementation.
+`lanczos3`. The test reconstructs the source, resizes and hashes the output.
+`output_rgb_hex` must hash to `output_sha256`; the test checks that before it
+uses those bytes. Do not regenerate vectors from the Rust implementation.
 
 ## Fixtures
 

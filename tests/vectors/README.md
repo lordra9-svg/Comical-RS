@@ -43,11 +43,22 @@ the screen left. Test that separately.
 
 - `source`: `width`, `height`, `pixel_rule`, `rgb_hex` and `rgb_sha256`.
   `rgb_hex` is row-major RGB8, three bytes per pixel, with no alpha.
-- `cases`: `name`, `filter`, `target` (`width`, `height`) and `output_sha256`.
+- `cases`: `name`, `filter`, `target` (`width`, `height`), `output_sha256`
+  and `output_rgb_hex`.
 
 Filters are `box`, `bicubic`, `bilinear`, `bspline`, `catmull_rom` and
 `lanczos3`. The test reconstructs the source from `rgb_hex`, resizes to the
-target with the named filter, and hashes the raw RGB8 output. Hashes are exact.
+target with the named filter and hashes the raw RGB8 output.
+
+The hash is exact. Where a platform reproduces it, that is the whole
+comparison. Where it does not, the test falls back to `output_rgb_hex` and
+requires every channel within two steps of the oracle and at most 1% of
+channels differing at all. That absorbs the last bit of the platform `powf` in
+the sRGB transfer functions while still failing a kernel that moved a region.
+`output_rgb_hex` comes from
+`cargo run -p comical-image --example derive_expected_pixels`, which refuses to
+write unless the build reproduces every oracle hash first, so the recorded
+pixels are the oracle's bytes.
 
 The vectors cover a 17x11 source, all six filters, scales from 0.1 to 2.0, odd
 dimensions and both pass orders. The oracle harness is not in this repository.

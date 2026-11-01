@@ -110,10 +110,16 @@ File: `tests/vectors/images.json`.
 - Cases: 42, six filters times seven target sizes.
 - Scales: 0.1, 0.25, 0.5, 0.75, 1.0, 1.3 and 2.0.
 - Both pass orders and odd dimensions are covered.
-- Expected value: SHA-256 of the raw RGB8 output.
+- Expected value: SHA-256 of the raw RGB8 output, plus the oracle's output
+  bytes in `output_rgb_hex`.
 
 Test: `crates/comical-image/tests/images.rs`. It reconstructs the source,
-resizes, hashes and asserts every case. A one-byte difference fails.
+resizes, hashes and asserts every case. The hash is exact wherever the platform
+reproduces it. Where it does not, the test compares `output_rgb_hex` with a
+two-step channel tolerance and a 1% differing-channel limit, because `powf` in
+the sRGB transfer functions is the platform libm. `output_rgb_hex` is derived by
+`examples/derive_expected_pixels.rs`, which refuses to run unless every oracle
+hash reproduces first.
 
 The vectors were recorded from a dirty-side oracle. The harness is not in this
 repository. Do not regenerate vectors from the Rust implementation; that would
