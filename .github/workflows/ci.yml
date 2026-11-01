@@ -41,3 +41,39 @@ jobs:
       # One entry point keeps CI and the local gate identical.
       - name: Run the gate
         run: cargo run -p xtask -- ci
+
+  # Packaging breaks in ways the gate cannot see: a WiX source wixl rejects, a
+  # missing icon, an installer that lost its file associations. Build a real
+  # release here and verify the artifacts themselves. Pull requests skip it,
+  # because two release builds per change is not worth the runner time.
+  packaging:
+    name: Release packaging
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - uses: Swatinem/rust-cache@v2
+
+      # wixl (msitools) builds the MSI on Linux; mingw-w64 provides the linker
+      # the Windows cross build needs.
+      - name: Install the packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends wixl wixl-data gcc-mingw-w64-x86-64
+
+      - name: Build the release artifacts
+        run: cargo run -p xtask -- release 0.0.0
+
+      # verify passes without an MSI, so require the installer explicitly.
+      - name: Require the MSI
+        run: test -s target/release-dist/0.0.0/comical-0.0.0-x86_64.msi
+
+      - name: Verify the artifacts
+        run: cargo run -p xtask -- verify target/release-dist/0.0.0

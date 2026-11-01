@@ -5,7 +5,18 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-11-01
+
 ### Added
+- Package verification reads the MSI's database instead of trusting its
+  container. The embedded cabinet payload must be the executable the same run
+  built, the table streams must carry the `.cbz`/`.cbr`/`.cb7` associations,
+  the `[#ComicalEXE],0` icon reference and the Start Menu shortcut, and the
+  product version must match the artifact's file name, so an edit that drops a
+  component fails before upload.
+- CI builds and verifies a real release. A `Release packaging` job installs
+  `wixl` and mingw-w64, runs `xtask release 0.0.0`, requires the MSI to exist and
+  then runs `xtask verify`, on every push to master.
 - `cargo run -p xtask -- verify [directory]` checks a finished release
   directory before it is published: the checksum manifest and its coverage, the
   Linux tarball's member, mode, ownership and bytes, the Debian and MSI
@@ -43,6 +54,9 @@ All notable changes to Comical-RS are documented here. Format follows
   synthetic fixtures.
 
 ## [0.2.0] — 2026-10-31
+
+Superseded by 0.2.1: the artifacts uploaded for 0.2.0 predate the renderer and
+packaging fixes below, so download 0.2.1 instead.
 
 ### Added
 - M12 packaging scaffolding: release build script, CHANGELOG, cargo-deb/cargo-wix/cargo-bundle configs

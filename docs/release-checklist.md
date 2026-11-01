@@ -8,6 +8,9 @@ this checklist covers everything that cannot be automated.
 ## Pre-release verification
 
 - [ ] `cargo run -p xtask -- verify target/release-dist/<version>` passes
+- [ ] The `Release packaging` CI job is green: it builds the artifacts on a
+  clean Ubuntu runner with `wixl` and mingw-w64, requires the MSI and runs the
+  same `verify` command
 - [ ] All milestones M0–M12 pass on Windows, macOS and Linux
 - [ ] `cargo fmt --all -- --check` passes
 - [ ] `cargo clippy --all-targets -- -D warnings` passes with zero warnings

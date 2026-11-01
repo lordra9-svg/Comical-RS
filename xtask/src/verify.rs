@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
 
+use crate::msi;
 use crate::release;
 
 /// Machine type for x86-64 in a PE header.
@@ -27,6 +28,20 @@ const IMAGE_SUBSYSTEM_WINDOWS_GUI: u16 = 2;
 /// Imports the Windows executable must keep: the OS, the window layer and the
 /// DX12 shader compiler that only arrives with wgpu's `dx12` backend.
 const REQUIRED_IMPORTS: [&str; 3] = ["KERNEL32.dll", "USER32.dll", "d3dcompiler_47.dll"];
+/// Installer strings that prove the associations and the shortcut survived.
+/// The registry component is the one a careless edit to the WiX source drops.
+const REQUIRED_MSI_STRINGS: [&str; 10] = [
+    "comical.exe",
+    "Comical.CBZ",
+    "Comical.CBR",
+    "Comical.CB7",
+    ".cbz",
+    ".cbr",
+    ".cb7",
+    "[#ComicalEXE],0",
+    "\"[#ComicalEXE]\" \"%1\"",
+    "StartMenuComical",
+];
 
 /// Verifies `directory`, or the current version's release directory.
 pub fn run(directory: Option<String>) -> Result<(), Box<dyn Error>> {
@@ -284,25 +299,89 @@ fn check_deb(path: &Path) -> Result<String, String> {
     Ok(format!("{name}: {} bytes, ar members present", bytes.len()))
 }
 
-/// Checks the MSI is an OLE compound file holding an installer stream.
+/// Checks the MSI holds the installer this project ships: the executable of
+/// this run, the `.cbz`/`.cbr`/`.cb7` associations and the Start Menu
+/// shortcut, at the version in the artifact's file name.
 fn check_msi(path: &Path) -> Result<String, String> {
     let name = file_name(path);
     let bytes = fs::read(path).map_err(|error| format!("{name}: {error}"))?;
-    if !bytes.starts_with(&[0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]) {
-        return Err(format!("{name}: not an OLE compound file"));
-    }
-    // The summary information stream name is stored as UTF-16 in the directory.
-    let summary: Vec<u8> = "\u{5}SummaryInformation"
-        .encode_utf16()
-        .flat_map(u16::to_le_bytes)
-        .collect();
-    if !bytes
-        .windows(summary.len())
-        .any(|window| window == summary.as_slice())
+    let package = msi::read(&bytes).map_err(|error| format!("{name}: {error}"))?;
+
+    if !package
+        .streams
+        .iter()
+        .any(|stream| stream == "\u{5}SummaryInformation")
     {
         return Err(format!("{name}: no SummaryInformation stream"));
     }
-    Ok(format!("{name}: {} bytes, compound file", bytes.len()))
+
+    // The table streams are uncompressed, so a dropped component shows up as a
+    // missing string even though the stream names are obfuscated.
+    for required in REQUIRED_MSI_STRINGS {
+        if !holds(&package.tables, required.as_bytes()) {
+            return Err(format!(
+                "{name}: installer tables omit {required:?}, so that component was dropped"
+            ));
+        }
+    }
+
+    let version = msi_version(&name)
+        .ok_or_else(|| format!("{name}: expected comical-<version>-x86_64.msi"))?;
+    if !holds(&package.tables, version.as_bytes()) {
+        return Err(format!(
+            "{name}: installer does not carry product version {version}"
+        ));
+    }
+
+    // The payload must be the executable this same run produced, not one left
+    // over from an earlier build.
+    let shipped = path
+        .parent()
+        .map(|directory| directory.join("comical-windows-x86_64.exe"))
+        .filter(|executable| executable.is_file());
+    if let Some(executable) = shipped {
+        let expected = fs::metadata(&executable)
+            .map_err(|error| format!("{name}: {error}"))?
+            .len();
+        if !package
+            .payload
+            .iter()
+            .any(|file| u64::from(file.size) == expected)
+        {
+            return Err(format!(
+                "{name}: embedded payload is not the {expected}-byte executable beside it"
+            ));
+        }
+    }
+
+    let payload: Vec<String> = package
+        .payload
+        .iter()
+        .map(|file| format!("{} ({} bytes)", file.name, file.size))
+        .collect();
+    Ok(format!(
+        "{name}: {} bytes, {} streams, payload {}, version {version}, associations and shortcut present",
+        bytes.len(),
+        package.streams.len(),
+        payload.join(" + ")
+    ))
+}
+
+fn holds(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
+}
+
+/// Reads the version out of `comical-1.2.3-x86_64.msi`.
+fn msi_version(name: &str) -> Option<String> {
+    let rest = name.strip_prefix("comical-")?;
+    let version = rest.strip_suffix("-x86_64.msi")?;
+    let numeric = !version.is_empty()
+        && version
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || byte == b'.');
+    numeric.then(|| version.to_owned())
 }
 
 /// The fields of a PE image that packaging cares about.
@@ -615,6 +694,26 @@ mod tests {
 
         let error = check_windows_exe(&path).expect_err("missing imports");
         assert!(error.contains("USER32.dll"), "{error}");
+    }
+
+    #[test]
+    fn msi_version_comes_from_the_file_name() {
+        assert_eq!(
+            msi_version("comical-1.2.3-x86_64.msi"),
+            Some("1.2.3".to_owned())
+        );
+        assert_eq!(msi_version("comical-windows-x86_64.exe"), None);
+        assert_eq!(msi_version("comical-1.2.3-x86_64.msi.exe"), None);
+    }
+
+    #[test]
+    fn msi_check_rejects_a_file_that_is_not_an_installer() {
+        let directory = tempfile::tempdir().expect("dir");
+        let path = directory.path().join("comical-1.2.3-x86_64.msi");
+        fs::write(&path, b"not an installer at all").expect("write msi");
+
+        let error = check_msi(&path).expect_err("must fail");
+        assert!(error.contains("comical-1.2.3-x86_64.msi"), "{error}");
     }
 
     #[test]

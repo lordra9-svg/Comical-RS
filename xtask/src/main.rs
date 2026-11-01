@@ -5,6 +5,7 @@
 mod ci;
 mod corpus;
 mod fixtures;
+mod msi;
 mod release;
 mod tool;
 mod verify;
