@@ -157,29 +157,80 @@ fn windows_cross(root: &Path, dist: &Path, version: &str) -> Result<(), Box<dyn 
 
 /// Builds the MSI from the Windows executable already in `dist`.
 ///
-/// The `.wxs` names its source through the `BinaryPath` preprocessor variable,
-/// so the MSI packages whichever binary this run produced instead of assuming
-/// the MSVC output path.
+/// Prefers `wixl` from msitools, which reads the same WiX v3 source on Linux,
+/// macOS and Windows; falls back to `cargo-wix` on Windows. Both are told the
+/// binary path and version of this run, so the MSI never packages a stale file.
 fn msi(dist: &Path, version: &str) -> Result<(), Box<dyn Error>> {
-    if !tool::command_exists("cargo-wix") {
-        println!("[windows-msi] SKIP: cargo-wix not installed (cargo install cargo-wix)");
-        return Ok(());
-    }
     let exe = dist.join("comical-windows-x86_64.exe");
     if !exe.is_file() {
         return Err(format!("windows-msi: {} does not exist", exe.display()).into());
     }
-
+    let source = wix_source()?;
     let output = dist.join(format!("comical-{version}-x86_64.msi"));
-    println!("[windows-msi] cargo wix -> {}", output.display());
-    let args = wix_args(&exe, &output);
-    let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
-    tool::cargo(&borrowed)?;
+
+    if tool::command_exists("wixl") {
+        println!("[windows-msi] wixl -> {}", output.display());
+        let args = wixl_args(&source, &exe, &output, version);
+        let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+        // Run from the wix directory: WixUI_Minimal reads License.rtf from it.
+        tool::run("wixl", &borrowed, source.parent())?;
+    } else if tool::command_exists("cargo-wix") {
+        println!("[windows-msi] cargo wix -> {}", output.display());
+        let args = wix_args(&exe, &output);
+        let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+        tool::cargo(&borrowed)?;
+    } else {
+        println!("[windows-msi] SKIP: install wixl (msitools) or cargo-wix to build it");
+        return Ok(());
+    }
 
     if !output.is_file() {
-        return Err(format!("windows-msi: cargo wix did not write {}", output.display()).into());
+        return Err(format!("windows-msi: no MSI was written to {}", output.display()).into());
     }
     Ok(())
+}
+
+/// The WiX source lives next to the crate that defines the binary.
+fn wix_source() -> Result<PathBuf, Box<dyn Error>> {
+    let source = workspace_root()?.join("crates/comical-app/wix/main.wxs");
+    if !source.is_file() {
+        return Err(format!("windows-msi: {} does not exist", source.display()).into());
+    }
+    Ok(source)
+}
+
+/// Command line for `wixl`. The UI fragment comes from wixl-data, and the two
+/// variables are what the `.wxs` requires.
+fn wixl_args(source: &Path, exe: &Path, output: &Path, version: &str) -> Vec<String> {
+    let mut args = vec![
+        "--arch".to_owned(),
+        "x64".to_owned(),
+        "--ext".to_owned(),
+        "ui".to_owned(),
+    ];
+    // Set when wixl-data was unpacked somewhere other than its compiled-in
+    // default, as happens with a portable install.
+    for (variable, flag) in [("WIXL_EXTDIR", "--extdir"), ("WIXL_WXIDIR", "--wxidir")] {
+        if let Ok(directory) = std::env::var(variable)
+            && !directory.is_empty()
+        {
+            args.push(flag.to_owned());
+            args.push(directory);
+        }
+    }
+    args.push("-D".to_owned());
+    args.push(format!("Version={version}"));
+    args.push("-D".to_owned());
+    args.push(format!("BinaryPath={}", exe.display()));
+    args.push("-o".to_owned());
+    args.push(output.to_string_lossy().into_owned());
+    args.push(
+        source
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| source.to_string_lossy().into_owned()),
+    );
+    args
 }
 
 /// Command line for `cargo wix`, including the `candle` argument that points it
@@ -458,10 +509,35 @@ mod tests {
         let wxs = fs::read_to_string(&path).expect("read main.wxs");
         assert!(wxs.contains("Source='$(var.BinaryPath)'"), "{wxs}");
         assert!(!wxs.contains("x86_64-pc-windows-msvc/release"), "{wxs}");
-        assert!(
-            wxs.contains("<?define BinaryPath"),
-            "a default must keep a bare `cargo wix` working"
-        );
+        // wixl (msitools) rejects WiX preprocessor instructions, and the build
+        // tool now always supplies the variable, so no `<?define?>` is needed.
+        assert!(!wxs.contains("<?define"), "{wxs}");
+        assert!(!wxs.contains("<?ifndef"), "{wxs}");
+    }
+
+    #[test]
+    fn wixl_arguments_carry_arch_ext_and_both_variables() {
+        let source = Path::new("/repo/crates/comical-app/wix/main.wxs");
+        let exe = Path::new("/repo/dist/comical-windows-x86_64.exe");
+        let output = Path::new("/repo/dist/comical-1.2.3-x86_64.msi");
+        let args = wixl_args(source, exe, output, "1.2.3");
+
+        assert!(args.contains(&"--arch".to_owned()));
+        assert!(args.contains(&"x64".to_owned()));
+        assert!(args.contains(&"--ext".to_owned()));
+        assert!(args.contains(&"ui".to_owned()));
+        assert!(args.contains(&"Version=1.2.3".to_owned()));
+        assert!(args.contains(&"BinaryPath=/repo/dist/comical-windows-x86_64.exe".to_owned()));
+        assert!(args.contains(&"/repo/dist/comical-1.2.3-x86_64.msi".to_owned()));
+        // wixl is run from the source directory, so it gets the bare file name.
+        assert_eq!(args.last().map(String::as_str), Some("main.wxs"));
+    }
+
+    #[test]
+    fn wix_source_and_license_exist() {
+        let source = wix_source().expect("wix source");
+        let license = source.parent().expect("wix directory").join("License.rtf");
+        assert!(license.is_file(), "WixUI_Minimal needs License.rtf");
     }
 
     #[test]

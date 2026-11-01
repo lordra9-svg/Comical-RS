@@ -42,9 +42,10 @@ this checklist covers everything that cannot be automated.
 ## File association verification
 
 - [ ] **Windows**: Install MSI on clean Windows VM; verify .cbz/.cbr/.cb7 open with Comical
-  - The MSI is only produced when `cargo-wix` is installed on the machine
-    running `cargo run -p xtask -- release`; the command skips with a message
-    otherwise. It packages the executable that run built, MSVC or GNU cross.
+  - The MSI is produced when `wixl` (msitools) or `cargo-wix` is installed on
+    the machine running `cargo run -p xtask -- release`; the command skips with
+    a message otherwise. It packages the executable that run built, MSVC or GNU
+    cross, so a Linux release run can produce the installer too.
 - [ ] **macOS**: Install .app on clean macOS; verify double-click opens comic files
 - [ ] **Linux**: Install .deb on clean Ubuntu/Debian; verify `xdg-open comic.cbz` launches Comical
 

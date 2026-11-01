@@ -9,7 +9,7 @@ Build or obtain the binary from `target/release-dist/<version>/`:
 
 ```text
 comical-windows-x86_64.exe
-comical_<version>-x86_64.msi      (only when cargo-wix ran on Windows)
+comical_<version>-x86_64.msi      (when wixl or cargo-wix was available)
 ```
 
 The log file is `%APPDATA%\comical\data\comical.log`. Delete it before the first

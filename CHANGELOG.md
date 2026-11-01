@@ -27,6 +27,11 @@ All notable changes to Comical-RS are documented here. Format follows
   from Vulkan or GLES in a release build.
 
 ### Changed
+- The MSI no longer needs a Windows host. `xtask release` builds it with
+  `wixl` from msitools when that is installed and falls back to `cargo-wix`,
+  passing both the binary path and the version of the current run. The WiX
+  source no longer uses preprocessor instructions, which wixl rejects, and the
+  installer now shows the MIT license from `License.rtf`.
 - The MSI packages the executable the release run actually built. The WiX
   source takes its `Source` from a `BinaryPath` variable that `xtask release`
   fills in, and the MSI step now also runs after a Linux cross build instead of

@@ -236,6 +236,19 @@ if the license or dependency set changed.
 When adding CI, run the archive tests on all three platforms. Do not assume the
 GNU-specific behavior is portable.
 
+## Build the MSI on Linux
+
+`xtask release` builds the Windows installer with `wixl` from msitools when it
+is on `PATH`, and with `cargo-wix` otherwise. On Debian/Ubuntu:
+
+```text
+apt-get install msitools
+```
+
+If wixl-data was unpacked somewhere other than its compiled-in location, point
+at it with `WIXL_EXTDIR` (the `ext` directory) and `WIXL_WXIDIR` (the `include`
+directory); the release command passes both to wixl.
+
 ## Windows smoke test
 
 The Windows executable is a GUI binary, so it prints nothing to a console.

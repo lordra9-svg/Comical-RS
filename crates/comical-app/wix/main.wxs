@@ -5,14 +5,18 @@
 -->
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
   <!--
-    The executable to package. The xtask release command passes the binary it
-    just built, which is the MSVC target on a Windows host and the GNU cross
-    build on Linux; the default keeps a bare cargo wix run working on a Windows
-    MSVC host.
+    Two variables must come from the build tool, because the binary is not
+    always in one fixed place (MSVC build on Windows, GNU cross build on Linux,
+    or a dist copy) and the version lives in the workspace Cargo.toml:
+
+      BinaryPath  path of the comical.exe to package
+      Version     product version, for example 0.2.0
+
+    The xtask release command passes both. WiX preprocessor instructions are
+    deliberately absent: wixl rejects them, and the variables are required
+    rather than defaulted so a wrong build fails loudly instead of packaging a
+    stale file.
   -->
-  <?ifndef BinaryPath?>
-  <?define BinaryPath = "target\x86_64-pc-windows-msvc\release\comical.exe"?>
-  <?endif?>
   <Product
     Id='*'
     Name='Comical'
@@ -81,8 +85,10 @@
       <ComponentRef Id='StartMenuShortcut'/>
     </Feature>
 
+    <!-- WixUI_Minimal shows License.rtf, which sits next to this file. The
+         error-progress-text fragment is not shipped by wixl-data, so the UI
+         is limited to what both WiX and wixl can build from one source. -->
     <UIRef Id='WixUI_Minimal'/>
-    <UIRef Id='WixUI_ErrorProgressText'/>
 
     <Property Id='WIXUI_INSTALLDIR' Value='APPLICATIONFOLDER'/>
   </Product>
