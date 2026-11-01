@@ -5,6 +5,12 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- `comical-image/examples/bench_decode.rs` and `bench_resize.rs` measure the
+  decode path and every resampling filter and print a checksum of each output,
+  so a change can be compared against the previous build. `docs/image.md`
+  records the recorded baseline and how to read it.
+
 ### Fixed
 - 0.2.2 answered every channel of the linear-to-sRGB pass with a binary search
   over the recorded thresholds. That is correct and deterministic, but the

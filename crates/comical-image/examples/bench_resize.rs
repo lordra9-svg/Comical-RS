@@ -1,10 +1,10 @@
-//! Local throughput harness for the resize path.
+//! Local throughput harness for the resampling filters.
 //!
 //! `cargo run -p comical-image --release --example bench_resize` prints the
-//! median and best wall time for four representative resizes plus the
-//! linear-to-sRGB conversion, and a checksum of every output so two builds can
-//! be compared for identical bytes. It is not part of the test gate: timings
-//! move with the machine, and CI asserts the golden hashes instead.
+//! median and best wall time for every [`Filter`] at a downscale and an
+//! upscale, plus a checksum of each output so two builds can be compared for
+//! identical bytes. It is not part of the test gate: timings move with the
+//! machine, and CI asserts the golden hashes instead.
 
 use std::hint::black_box;
 use std::time::Instant;
@@ -65,31 +65,34 @@ fn checksum(bytes: &[u8]) -> u64 {
 
 fn main() {
     let src = source(1600, 1200);
-
-    let cases: [(Filter, u32, u32, &str); 4] = [
-        (Filter::Lanczos3, 800, 600, "lanczos3 1600x1200 -> 800x600"),
-        (Filter::Bicubic, 1000, 750, "bicubic 1600x1200 -> 1000x750"),
-        (
-            Filter::CatmullRom,
-            2080,
-            1560,
-            "catmull 1600x1200 -> 2080x1560",
-        ),
-        (Filter::Box, 1600, 1200, "box 1600x1200 -> 1600x1200"),
+    let filters = [
+        Filter::Box,
+        Filter::Bilinear,
+        Filter::Bicubic,
+        Filter::BSpline,
+        Filter::CatmullRom,
+        Filter::Lanczos3,
     ];
+    // A reader view caps the long side at 2048 px, so a comic page is usually
+    // scaled down to fit; upscaling matters for small pages read full-screen.
+    let targets = [(1200, 900, "down 0.75x"), (2080, 1560, "up 1.3x")];
 
-    println!("resize from 1600x1200, median ms and output MPix/s");
-    for (filter, width, height, label) in cases {
-        let (best, median) = bench(|| {
-            let out = resize(&src, width, height, filter).expect("resize");
-            black_box(out);
-        });
-        let out = resize(&src, width, height, filter).expect("resize");
+    println!("resize from 1600x1200, median ms, output MPix/s, and output checksum");
+    for (width, height, label) in targets {
         let mpix = f64::from(width) * f64::from(height) / 1e6;
-        println!(
-            "{label:<34} {median:8.2} ms  {:6.1} MPix/s (best {best:.2} ms) sum {:016x}",
-            mpix / (median / 1000.0),
-            checksum(out.pixels())
-        );
+        println!("-- {label}: {width}x{height} ({mpix:.2} MPix)");
+        for filter in filters {
+            let (best, median) = bench(|| {
+                let out = resize(&src, width, height, filter).expect("resize");
+                black_box(out);
+            });
+            let out = resize(&src, width, height, filter).expect("resize");
+            println!(
+                "{:<11} {median:8.2} ms  {:6.1} MPix/s (best {best:.2} ms) sum {:016x}",
+                format!("{filter:?}"),
+                mpix / (median / 1000.0),
+                checksum(out.pixels())
+            );
+        }
     }
 }

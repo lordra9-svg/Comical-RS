@@ -176,6 +176,46 @@ cargo test -p comical-image --release
 
 The golden test runs in both debug and release.
 
+## Benchmarks
+
+Two examples measure the pipeline. They print timings and checksums for a human
+to compare two builds, and they are not part of the gate: absolute numbers move
+with the machine.
+
+```text
+cargo run -p comical-image --release --example bench_decode
+cargo run -p comical-image --release --example bench_resize
+```
+
+- `bench_decode` encodes one 1600x1200 page to PNG, JPEG, GIF and WebP, then
+times `probe_size` with and without EXIF, `decode`, and the per-page flow (decode
+plus an 80 px thumbnail).
+- `bench_resize` times every filter, downscaling to 1200x900 and upscaling to
+  2080x1560, and prints output MPix/s.
+
+Each case runs seven timed blocks of about 200 ms and reports the median and the
+best. The checksum is FNV-1a over the output pixels: two builds that print the
+same checksums did the same work, so a timing difference is not a different
+result.
+
+Recorded on an 8-core Linux VM in release mode, median milliseconds for one
+1600x1200 page. Treat it as a regression baseline, not a target.
+
+| Stage | Time |
+|---|---:|
+| `decode` PNG, JPEG, GIF | 12.6, 12.3, 12.8 |
+| `decode` WebP | 27.5 |
+| `probe_size`, with or without EXIF | at most 0.16 |
+| resize to 1200x900, Box through Lanczos3 | 64 to 104 |
+| resize to 2080x1560, Box through Lanczos3 | 116 to 212 |
+| 80x60 thumbnail from the decoded page | 8.4 |
+
+The resampler is the expensive stage, not the decoder: one 1.08 MPix result
+costs five to eight times the full 1.92 MPix decode. Inside it the fixed
+per-channel cost dominates the taps, because Bilinear (two taps) to Lanczos3
+(nine taps) is only 1.6x the time, so a narrower kernel buys little. Thumbnails
+are charged per page and touch every source pixel.
+
 ## Maintenance
 
 ### Add a filter

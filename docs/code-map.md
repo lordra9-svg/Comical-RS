@@ -266,6 +266,8 @@ know about archives, spreads or UI.
 | `src/rotate.rs` | `Rotation` and index-remapped quarter turns |
 | `src/resize.rs` | `Filter`, contributions, two passes and target validation |
 | `src/srgb.rs` | sRGB transfer tables recorded as data, so no transfer function call is platform dependent |
+| `examples/bench_decode.rs` | Decode throughput for PNG, JPEG, GIF and WebP, plus the per-page flow |
+| `examples/bench_resize.rs` | Throughput for every filter at a downscale and an upscale |
 | `tests/decode.rs` | PNG RGB/RGBA, JPEG, GIF first frame and bad input |
 | `tests/images.rs` | All 42 golden filter hashes |
 | `tests/transform.rs` | Rotations, zero targets, buffer and dimension checks |
