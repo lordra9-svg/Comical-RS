@@ -236,6 +236,14 @@ if the license or dependency set changed.
 When adding CI, run the archive tests on all three platforms. Do not assume the
 GNU-specific behavior is portable.
 
+## Windows smoke test
+
+The Windows executable is a GUI binary, so it prints nothing to a console.
+Before publishing, work through `docs/windows-checklist.md` on a real Windows
+machine: launch from Explorer, confirm the renderer line in
+`%APPDATA%\comical\data\comical.log`, check DPI scaling across monitors, the
+icon, file associations, the fatal-error dialog and the MSI.
+
 ## Provenance and licensing
 
 - New code is MIT.
@@ -258,6 +266,7 @@ Before release, generate a full dependency license report with `cargo-about` or
 - [ ] `cargo test --workspace`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`
 - [ ] Windows, macOS and Linux CI green
+- [ ] `docs/windows-checklist.md` completed on a real Windows machine
 - [ ] Real-world ZIP, RAR and 7z corpus passes list and exact-byte checks
 - [ ] Encrypted ZIP, RAR and 7z samples pass
 - [ ] Multi-volume RAR fails with the documented error

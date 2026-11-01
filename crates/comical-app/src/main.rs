@@ -5,7 +5,20 @@
 // window behind it. Debug builds keep the console for panic and log output.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    comical_app::diagnostics::install_panic_hook();
+
     let path = std::env::args().nth(1);
-    comical_app::run(path.as_deref())
+    match comical_app::run(path.as_deref()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            // A GUI build has nowhere to print, so this also writes the log
+            // and, on Windows, shows a dialog naming it.
+            let message = comical_app::diagnostics::report_fatal(&error.to_string());
+            eprintln!("{message}");
+            ExitCode::FAILURE
+        }
+    }
 }

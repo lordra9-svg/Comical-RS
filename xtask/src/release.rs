@@ -330,3 +330,83 @@ fn is_version(value: &str) -> bool {
         part.is_some_and(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_version_matches_the_packaged_crate() {
+        let root = workspace_root().expect("workspace root");
+        let version = workspace_version(&root).expect("version");
+        assert_eq!(version, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn version_validation_accepts_three_numeric_parts() {
+        for good in ["0.2.0", "1.0.0", "10.20.30"] {
+            assert!(is_version(good), "{good} should be accepted");
+        }
+        for bad in ["1.0", "1.0.0.0", "1.0.x", "v1.0.0", "", "1..0", " 1.0.0"] {
+            assert!(!is_version(bad), "{bad:?} should be rejected");
+        }
+    }
+
+    #[test]
+    fn tarball_preserves_content_and_normalizes_ownership() {
+        let directory = tempfile::tempdir().expect("temp dir");
+        let source = directory.path().join("comical");
+        fs::write(&source, b"binary payload").expect("write source");
+        let archive = directory.path().join("comical.tar.gz");
+
+        write_tarball(&source, "comical", &archive).expect("write tarball");
+
+        let file = fs::File::open(&archive).expect("open tarball");
+        let decoder = flate2::read::GzDecoder::new(file);
+        let mut archive = tar::Archive::new(decoder);
+        let mut entries = archive.entries().expect("entries");
+        let mut entry = entries.next().expect("one entry").expect("entry");
+
+        assert_eq!(entry.path().expect("path").to_string_lossy(), "comical");
+        assert_eq!(entry.header().mode().expect("mode"), 0o755);
+        assert_eq!(entry.header().uid().expect("uid"), 0);
+        assert_eq!(entry.header().gid().expect("gid"), 0);
+
+        let mut content = Vec::new();
+        entry.read_to_end(&mut content).expect("read member");
+        assert_eq!(content, b"binary payload");
+        assert!(entries.next().is_none(), "tarball must hold one member");
+    }
+
+    #[test]
+    fn checksums_cover_every_artifact_in_sorted_order() {
+        let directory = tempfile::tempdir().expect("dist dir");
+        fs::write(directory.path().join("b.bin"), b"beta").expect("write b");
+        fs::write(directory.path().join("a.bin"), b"alpha").expect("write a");
+
+        checksums(directory.path()).expect("checksums");
+
+        let text = fs::read_to_string(directory.path().join("SHA256SUMS.txt")).expect("read sums");
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 2, "{text}");
+        assert!(lines[0].ends_with("  ./a.bin"), "{}", lines[0]);
+        assert!(lines[1].ends_with("  ./b.bin"), "{}", lines[1]);
+        assert_eq!(
+            lines[0],
+            format!(
+                "{}\u{20}\u{20}./a.bin",
+                sha256(&directory.path().join("a.bin")).expect("hash")
+            )
+        );
+    }
+
+    #[test]
+    fn checksums_ignore_their_own_output() {
+        let directory = tempfile::tempdir().expect("dist dir");
+        fs::write(directory.path().join("only.bin"), b"payload").expect("write");
+        checksums(directory.path()).expect("first pass");
+        checksums(directory.path()).expect("second pass");
+        let text = fs::read_to_string(directory.path().join("SHA256SUMS.txt")).expect("read sums");
+        assert_eq!(text.lines().count(), 1, "{text}");
+    }
+}

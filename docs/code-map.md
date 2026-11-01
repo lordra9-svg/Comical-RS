@@ -35,6 +35,7 @@ tests that protect it. Use this as the starting point when tracing a failure.
 | `docs/image.md` | Decode, rotation, filters, golden hashes and image maintenance |
 | `docs/testing.md` | Test layers, fixtures, vector schemas and debugging |
 | `docs/runbook.md` | Build, diagnose, change and release procedures |
+| `docs/windows-checklist.md` | Manual Windows smoke test before publishing |
 | `docs/roadmap.md` | Placeholders, planned milestones and known gaps |
 
 ## `comical-core`
@@ -303,6 +304,7 @@ Desktop viewer. eframe/egui shell over the three product crates. Details:
 | `src/nav.rs` | Keyboard snapshot and map |
 | `src/error.rs` | `AppError` |
 | `tests/open_book.rs` | Directory book opens; page 0 decodes at natural size |
+| `src/diagnostics.rs` | Startup log, panic hook and the Windows fatal-error dialog |
 | `build.rs` | Windows `.rsrc` section: icon, VERSIONINFO, manifest |
 | `assets/comical.ico`, `assets/windows.manifest` | Icon and manifest embedded on Windows |
 

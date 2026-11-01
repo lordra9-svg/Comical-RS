@@ -12,6 +12,11 @@ All notable changes to Comical-RS are documented here. Format follows
   explicitly. The executable also carries an icon, version information and an
   application manifest (asInvoker, per-monitor DPI, Windows 10/11, long paths),
   where it previously had no `.rsrc` section at all.
+- GUI builds no longer fail silently. Panics and fatal startup errors are
+  appended to `comical.log` in the platform data directory, a fatal error on
+  Windows also opens a message box naming that file, and the log records the
+  wgpu backend and adapter that came up, which is the only way to tell DX12
+  from Vulkan or GLES in a release build.
 
 ### Changed
 - Repository tooling is Rust only. The `scripts/` shell scripts became the

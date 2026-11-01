@@ -16,6 +16,7 @@
 mod app;
 mod browser;
 mod cache;
+pub mod diagnostics;
 mod error;
 mod nav;
 mod settings;
@@ -40,6 +41,7 @@ pub fn run(path: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(path) = path
         && let Err(error) = app.open_book(path)
     {
+        diagnostics::record(&format!("startup: could not open {path}: {error}"));
         app.show_error(error.to_string());
     }
 
@@ -58,7 +60,18 @@ pub fn run(path: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     eframe::run_native(
         "comical",
         options,
-        Box::new(move |_cc| Ok(Box::new(app) as Box<dyn eframe::App>)),
+        Box::new(move |cc| {
+            // Record which backend actually came up. On Windows this is the
+            // difference between DX12, Vulkan and the GLES fallback.
+            if let Some(render_state) = &cc.wgpu_render_state {
+                let adapter = render_state.adapter.get_info();
+                diagnostics::record(&format!(
+                    "startup: backend={:?} device={:?} adapter={} driver={}",
+                    adapter.backend, adapter.device_type, adapter.name, adapter.driver
+                ));
+            }
+            Ok(Box::new(app) as Box<dyn eframe::App>)
+        }),
     )?;
     Ok(())
 }

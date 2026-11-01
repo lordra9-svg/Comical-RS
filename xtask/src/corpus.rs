@@ -101,9 +101,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     fs::create_dir_all(pages_dir.join("deep/path/here"))?;
     fs::create_dir_all(&fixtures)?;
 
-    for (name, header, filler, padding) in PAGES {
-        let mut bytes = header.to_vec();
-        bytes.extend(std::iter::repeat_n(*filler, *padding));
+    for &(name, ..) in PAGES {
+        let bytes = page_bytes(name).ok_or("regen-corpus: unknown page stub")?;
         fs::write(pages_dir.join(name), bytes)?;
     }
 
@@ -273,11 +272,23 @@ fn seven_zip(
     tool::run(program, &args, Some(pages))
 }
 
+/// Bytes of a page stub: its header followed by the filler byte.
+fn page_bytes(name: &str) -> Option<Vec<u8>> {
+    let (_, header, filler, padding) = PAGES.iter().find(|(stub, ..)| *stub == name)?;
+    let mut bytes = header.to_vec();
+    bytes.extend(std::iter::repeat_n(*filler, *padding));
+    Some(bytes)
+}
+
+/// How much of a fixture to keep: a quarter, but at least 32 bytes.
+fn truncated_len(len: usize) -> usize {
+    (len / 4).max(32).min(len)
+}
+
 /// Copies the first quarter of `source`, but at least 32 bytes, to `destination`.
 fn truncate(source: &Path, destination: &Path) -> Result<(), Box<dyn Error>> {
     let bytes = fs::read(source)?;
-    let keep = (bytes.len() / 4).max(32).min(bytes.len());
-    fs::write(destination, &bytes[..keep])?;
+    fs::write(destination, &bytes[..truncated_len(bytes.len())])?;
     Ok(())
 }
 
@@ -349,4 +360,98 @@ fn workspace_root() -> Result<PathBuf, Box<dyn Error>> {
         .parent()
         .map(Path::to_path_buf)
         .ok_or_else(|| "regen-corpus: xtask has no workspace parent".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The manifest records digests of the committed page stubs. If a stub
+    /// changes without the manifest, the corpus test would still pass against
+    /// the old pages while regeneration produces different bytes.
+    #[test]
+    fn stub_bytes_match_the_committed_manifest() {
+        let text = fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/corpus/manifest.json"),
+        )
+        .expect("read the committed manifest");
+        let value: serde_json::Value = serde_json::from_str(&text).expect("parse manifest");
+        let pages = value["pages"].as_object().expect("pages object");
+
+        assert_eq!(pages.len(), PAGES.len(), "stub count");
+        for &(name, ..) in PAGES {
+            let bytes = page_bytes(name).expect("page stub");
+            let recorded = pages
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} in manifest"));
+            assert_eq!(
+                recorded["size"].as_u64().expect("size"),
+                bytes.len() as u64,
+                "{name} size"
+            );
+            assert_eq!(
+                recorded["sha256"].as_str().expect("sha256"),
+                sha256(&bytes),
+                "{name} hash"
+            );
+        }
+    }
+
+    #[test]
+    fn page_order_covers_every_stub_once() {
+        let mut listed: Vec<&str> = PAGES.iter().map(|(name, ..)| *name).collect();
+        let mut ordered = PAGE_ORDER.to_vec();
+        listed.sort_unstable();
+        ordered.sort_unstable();
+        assert_eq!(listed, ordered);
+    }
+
+    #[test]
+    fn unknown_stub_names_are_rejected() {
+        assert!(page_bytes("missing.png").is_none());
+    }
+
+    #[test]
+    fn truncation_keeps_a_quarter_with_a_32_byte_floor() {
+        assert_eq!(truncated_len(4096), 1024);
+        assert_eq!(truncated_len(100), 32);
+        assert_eq!(truncated_len(10), 10);
+        assert_eq!(truncated_len(0), 0);
+    }
+
+    /// Guards the manifest key order, page hashes and the case list at once:
+    /// regeneration must reproduce the committed file exactly.
+    #[test]
+    fn manifest_reproduces_the_committed_file() {
+        let root = workspace_root().expect("workspace root");
+        let expected =
+            fs::read_to_string(root.join("tests/corpus/manifest.json")).expect("committed file");
+        let regenerated = manifest(&root.join("tests/corpus/pages")).expect("manifest");
+        let actual = serde_json::to_string_pretty(&regenerated).expect("json") + "\n";
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn pages_serialize_in_insertion_order() {
+        let pages = Pages(vec![
+            (
+                "b.png".to_owned(),
+                PageInfo {
+                    size: 2,
+                    sha256: "x".to_owned(),
+                },
+            ),
+            (
+                "a.png".to_owned(),
+                PageInfo {
+                    size: 1,
+                    sha256: "y".to_owned(),
+                },
+            ),
+        ]);
+        let text = serde_json::to_string(&pages).expect("json");
+        let second = text.find("b.png").expect("b.png");
+        let first = text.find("a.png").expect("a.png");
+        assert!(second < first, "insertion order lost: {text}");
+    }
 }

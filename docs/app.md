@@ -19,6 +19,7 @@ toolbar, thumbnail browser, per-page rotation, RTL, and persistent settings.
 | `src/nav.rs` | Keyboard map |
 | `src/error.rs` | `AppError` |
 | `tests/open_book.rs` | Opens real directory books: natural size, sort order, remembered page, filter |
+| `src/diagnostics.rs` | Startup log, panic hook and the Windows fatal-error dialog |
 | `build.rs` | Windows resources: icon, version information and application manifest |
 | `assets/comical.ico` | Application icon, 16 through 256 pixels |
 | `assets/windows.manifest` | Elevation level, DPI awareness and Windows version declaration |
@@ -27,6 +28,12 @@ The window is drawn with the wgpu renderer, which uses DX12 or Vulkan on
 Windows and Vulkan or GLES elsewhere. The glow backend is not compiled in, so
 `eframe::NativeOptions::renderer` must stay `Renderer::Wgpu`; without it there
 is no fallback renderer to select.
+
+A release build on Windows has no console, so failures are written instead:
+panics and fatal startup errors are appended to `comical.log` in the platform
+data directory, a fatal startup error also opens a message box naming that
+file, and the log records the wgpu backend and adapter that came up. That log
+line is the only way to tell DX12 from Vulkan or GLES in a release build.
 
 ## State
 
