@@ -17,6 +17,8 @@ pub fn decode(bytes: &[u8]) -> Result<RgbImage, ImageError>;
 pub fn rotate(image: &RgbImage, rotation: Rotation) -> RgbImage;
 pub fn resize(image: &RgbImage, width: u32, height: u32, filter: Filter)
     -> Result<RgbImage, ImageError>;
+pub fn thumbnail(image: &RgbImage, width: u32, height: u32, filter: Filter)
+    -> Result<RgbImage, ImageError>;
 ```
 
 `RgbImage::new` validates dimensions and buffer length. Fields are private, so a
@@ -119,6 +121,31 @@ because the search lengthens the dependency chain in the pixel loop; with the
 coarse table the resize is 6% to 13% faster than 0.2.1. Measure before removing
 it (`examples/bench_resize.rs`).
 
+## Thumbnails
+
+`thumbnail` is `resize` with one step in front, and it is what the browser uses
+for its 80 px page strip.
+
+A large minification widens the window instead of narrowing it: from 1600 px to
+80 px, `support = 3 / 0.05`, so every output pixel reads 120 taps per axis and
+the convolution touches the whole page sixteen times over. `thumbnail` first
+averages fixed blocks of the source, in linear light, down to at least twice the
+target (`src / dst / 2`, so 1600 px becomes 160 px), then runs `resize` on that
+smaller image. The blocks are the source pixels themselves, each visited once,
+and the window in the second stage is short because the scale is now 0.5.
+
+Consequences:
+
+- The output is close to a direct `resize` but not byte identical to it: the
+  pre-pass is a box filter that rounds once. Use `resize` when a caller needs
+  the exact convolution result, `thumbnail` when it needs speed.
+- A block that runs past the edge is divided by its own pixel count, so
+  dimensions that the block size does not divide are still correct.
+- Every sum is in a fixed order over recorded table data, so two runs agree bit
+  for bit and no transfer function is called.
+- `src / dst < 2` leaves the factor at 1 and `thumbnail` simply calls `resize`,
+  so a mild downscale is unchanged.
+
 ## Golden vectors
 
 File: `tests/vectors/images.json`.
@@ -208,13 +235,15 @@ Recorded on an 8-core Linux VM in release mode, median milliseconds for one
 | `probe_size`, with or without EXIF | at most 0.16 |
 | resize to 1200x900, Box through Lanczos3 | 64 to 104 |
 | resize to 2080x1560, Box through Lanczos3 | 116 to 212 |
-| 80x60 thumbnail from the decoded page | 8.4 |
+| 80x60 thumbnail: direct `resize` / `thumbnail` | 8.4 / 2.7 |
 
 The resampler is the expensive stage, not the decoder: one 1.08 MPix result
 costs five to eight times the full 1.92 MPix decode. Inside it the fixed
 per-channel cost dominates the taps, because Bilinear (two taps) to Lanczos3
 (nine taps) is only 1.6x the time, so a narrower kernel buys little. Thumbnails
-are charged per page and touch every source pixel.
+are charged per page: a direct convolution of the whole page to the strip cost
+8.4 ms, and decimating the source first (see [Thumbnails](#thumbnails)) brings
+that to 2.7 ms, which moves the per-page flow from 20.0 ms to 13.7 ms.
 
 ## Maintenance
 

@@ -1,6 +1,6 @@
 //! Rotation and resize validation tests.
 
-use comical_image::{Filter, ImageError, RgbImage, Rotation, resize, rotate};
+use comical_image::{Filter, ImageError, RgbImage, Rotation, resize, rotate, thumbnail};
 
 fn source() -> RgbImage {
     // 2x3 image: each pixel encodes its index so rotations are easy to read.
@@ -69,6 +69,80 @@ fn four_quarter_turns_return_the_source() {
     }
     assert_eq!((image.width(), image.height()), (2, 3));
     assert_eq!(image.pixels(), original.pixels());
+}
+
+/// A smooth gradient large enough for the decimation path to engage.
+fn gradient(width: u32, height: u32) -> RgbImage {
+    let mut pixels = Vec::with_capacity((width * height * 3) as usize);
+    for y in 0..height {
+        for x in 0..width {
+            pixels.push((x * 255 / width) as u8);
+            pixels.push((y * 255 / height) as u8);
+            pixels.push(((x + y) * 255 / (width + height)) as u8);
+        }
+    }
+    RgbImage::new(width, height, pixels).expect("valid gradient")
+}
+
+#[test]
+fn thumbnail_hits_the_requested_size_and_keeps_a_flat_color() {
+    let flat = RgbImage::new(1600, 1200, vec![120; 1600 * 1200 * 3]).expect("valid flat image");
+    let thumb = thumbnail(&flat, 80, 60, Filter::Box).expect("thumbnail");
+    assert_eq!((thumb.width(), thumb.height()), (80, 60));
+    assert!(
+        thumb.pixels().iter().all(|&byte| byte == 120),
+        "a flat color must survive the decimation unchanged"
+    );
+}
+
+#[test]
+fn thumbnail_stays_close_to_a_direct_resize() {
+    let image = gradient(400, 300);
+    let direct = resize(&image, 40, 30, Filter::CatmullRom).expect("direct resize");
+    let fast = thumbnail(&image, 40, 30, Filter::CatmullRom).expect("thumbnail");
+    assert_eq!((fast.width(), fast.height()), (40, 30));
+    let worst = direct
+        .pixels()
+        .iter()
+        .zip(fast.pixels())
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap_or(0);
+    assert!(
+        worst <= 4,
+        "decimating first moved a channel by {worst} (limit 4)"
+    );
+}
+
+#[test]
+fn thumbnail_without_a_large_downscale_equals_resize() {
+    let image = gradient(100, 100);
+    let direct = resize(&image, 90, 90, Filter::Lanczos3).expect("direct resize");
+    let fast = thumbnail(&image, 90, 90, Filter::Lanczos3).expect("thumbnail");
+    assert_eq!(
+        fast.pixels(),
+        direct.pixels(),
+        "a small downscale must take the plain path"
+    );
+}
+
+#[test]
+fn thumbnail_handles_a_partial_edge_block() {
+    let image = gradient(1002, 702);
+    let thumb = thumbnail(&image, 100, 70, Filter::Bilinear).expect("thumbnail");
+    assert_eq!((thumb.width(), thumb.height()), (100, 70));
+}
+
+#[test]
+fn zero_thumbnail_target_is_rejected() {
+    let result = thumbnail(&source(), 0, 5, Filter::Box);
+    assert!(matches!(
+        result,
+        Err(ImageError::InvalidTarget {
+            width: 0,
+            height: 5
+        })
+    ));
 }
 
 #[test]

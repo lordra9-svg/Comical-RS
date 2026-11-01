@@ -213,9 +213,11 @@ mode draw pass free of mutable borrows.
 
 A left side panel 110 px wide with a white background. Each row is 60 px tall
 with 5 px horizontal and 3 px vertical margins. Thumbnails are generated on
-demand with `comical_image::resize` using the Box filter and cached in an LRU
+demand with `comical_image::thumbnail` using the Box filter and cached in an LRU
 cache (`lru::LruCache<usize, TextureHandle>`) keyed by page index. The cache
-lives on `App` and is cleared when a new book is opened. Clicking a row calls
+`thumbnail` decimates the page in linear light to twice the 80 px target before
+the filter runs; a direct `resize` to that size widens the window to the whole
+page and costs three times as much (`docs/image.md`). Clicking a row calls
 `SpreadState::go_to_page`. Selection follows the current page. Visibility
 defaults to on and is toggled with the `B` key; the state syncs to
 `Settings::browser_visible`. The browser is hidden in fullscreen mode.

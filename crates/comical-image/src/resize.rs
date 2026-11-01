@@ -366,6 +366,95 @@ pub fn resize(
     })
 }
 
+/// Largest block size that still leaves each side at least twice its target.
+///
+/// Decimating past twice the target would throw away detail the filter can
+/// still use, and stopping short of it would leave the wide windows that make a
+/// direct [`resize`] expensive.
+fn decimation_factor(src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> u32 {
+    (src_w / dst_w / 2).min(src_h / dst_h / 2).max(1)
+}
+
+/// Averages each `factor`x`factor` block of the source in linear light.
+///
+/// The last row and column of blocks may be partial when the block size does
+/// not divide the source, so each block is divided by its own pixel count.
+fn decimate(image: &RgbImage, factor: u32) -> Result<RgbImage, ImageError> {
+    let src_w = image.width() as usize;
+    let src_h = image.height() as usize;
+    let block = factor as usize;
+    let dst_w = src_w.div_ceil(block);
+    let dst_h = src_h.div_ceil(block);
+    let src = image.pixels();
+    let mut out = allocate_rgb(dst_w as u32, dst_h as u32)?;
+
+    for by in 0..dst_h {
+        let y0 = by * block;
+        let y1 = (y0 + block).min(src_h);
+        for bx in 0..dst_w {
+            let x0 = bx * block;
+            let x1 = (x0 + block).min(src_w);
+            let mut red = 0.0f32;
+            let mut green = 0.0f32;
+            let mut blue = 0.0f32;
+            for y in y0..y1 {
+                let row = y * src_w * 3;
+                for x in x0..x1 {
+                    let index = row + x * 3;
+                    red += SRGB_TO_LINEAR[src[index] as usize];
+                    green += SRGB_TO_LINEAR[src[index + 1] as usize];
+                    blue += SRGB_TO_LINEAR[src[index + 2] as usize];
+                }
+            }
+            let count = ((x1 - x0) * (y1 - y0)) as f32;
+            let index = (by * dst_w + bx) * 3;
+            out[index] = linear_to_srgb(red / count);
+            out[index + 1] = linear_to_srgb(green / count);
+            out[index + 2] = linear_to_srgb(blue / count);
+        }
+    }
+
+    Ok(RgbImage {
+        width: dst_w as u32,
+        height: dst_h as u32,
+        pixels: out,
+    })
+}
+
+/// Builds a small image by decimating the source before filtering it.
+///
+/// A large downscale asks the filter for a wide window: an 80 px thumbnail of a
+/// 1600 px page gives every output pixel a 120 tap window per axis, so a direct
+/// [`resize`] reads the whole page sixteen times over. This averages fixed
+/// blocks of the source down to at least twice the target first, then runs
+/// [`resize`] on that smaller image, which turns the wide windows into narrow
+/// ones.
+///
+/// Blocks are averaged in linear light, so the pre-pass does not darken the
+/// result, and the order of every sum is fixed, so two runs agree bit for bit.
+/// The output is close to a direct [`resize`] but not identical to it: the
+/// pre-pass is a box filter that rounds once on its way through, so keep
+/// [`resize`] wherever a caller needs exactly that result.
+///
+/// Returns [`ImageError::InvalidTarget`] when either target side is zero and
+/// [`ImageError::TooLarge`] when the target cannot be allocated.
+pub fn thumbnail(
+    image: &RgbImage,
+    width: u32,
+    height: u32,
+    filter: Filter,
+) -> Result<RgbImage, ImageError> {
+    if width == 0 || height == 0 {
+        return Err(ImageError::InvalidTarget { width, height });
+    }
+    let factor = decimation_factor(image.width(), image.height(), width, height);
+    if factor == 1 {
+        return resize(image, width, height, filter);
+    }
+    let reduced = decimate(image, factor)?;
+    resize(&reduced, width, height, filter)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

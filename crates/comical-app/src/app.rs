@@ -16,7 +16,9 @@ use comical_core::{
     Direction, MAX_CUSTOM_PERCENT, MIN_CUSTOM_PERCENT, PageEntry, PageOrientation, PagePart,
     PageRef, Rotation, Size, Spread, SpreadState, ViewMode, ZoomMode, ZoomOptions,
 };
-use comical_image::{Filter, RgbImage, decode, probe_size, resize, rotate as image_rotate};
+use comical_image::{
+    Filter, RgbImage, decode, probe_size, resize, rotate as image_rotate, thumbnail,
+};
 use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use eframe::egui::{ColorImage, Context, TextureHandle, TextureOptions};
 
@@ -649,7 +651,7 @@ fn decode_thumbnail(
     };
 
     let (width, height) = crate::browser::thumbnail_dimensions(decoded.width(), decoded.height());
-    let thumb = resize(&decoded, width, height, Filter::Box).unwrap_or(decoded);
+    let thumb = thumbnail(&decoded, width, height, Filter::Box).unwrap_or(decoded);
     let size = [thumb.width() as usize, thumb.height() as usize];
     ThumbResult {
         page,

@@ -277,7 +277,7 @@ Key public symbols:
 - `RgbImage`: validated constructor, dimensions, pixels, `pixel`.
 - `Rotation`: `None`, `Cw90`, `Cw180`, `Cw270`.
 - `Filter`: `Box`, `Bilinear`, `Bicubic`, `BSpline`, `CatmullRom`, `Lanczos3`.
-- `decode`, `rotate`, `resize`.
+- `decode`, `rotate`, `resize`, `thumbnail`.
 - `ImageError`.
 - `MAX_DECODED_PIXELS`.
 

@@ -5,6 +5,16 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- `comical-image` has a `thumbnail` function that averages blocks of the source
+  down to twice the target, in linear light, before running the same filter. A
+  large minification widens the filter window instead of narrowing it
+  (`support = 3 / scale`), so an 80 px thumbnail of a 1600 px page read every
+  source pixel sixteen times over: 8.4 ms for a direct `resize`, 2.7 ms now, and
+  the browser's per-page flow from 20.0 ms to 13.7 ms. `resize` is untouched and
+  still produces the golden vectors; the pre-pass rounds once, so `thumbnail` is
+  close to `resize` but not byte identical and stays a separate function.
+
 ### Added
 - `comical-image/examples/bench_decode.rs` and `bench_resize.rs` measure the
   decode path and every resampling filter and print a checksum of each output,

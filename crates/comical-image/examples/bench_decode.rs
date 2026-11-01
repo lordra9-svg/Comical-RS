@@ -3,14 +3,16 @@
 //! `cargo run -p comical-image --release --example bench_decode` encodes one
 //! deterministic page to PNG, JPEG, GIF and WebP, then prints the median and
 //! best wall time for `probe_size`, `decode` and the app's per-page flow
-//! (decode plus an 80 px thumbnail). It is not part of the test gate: timings
-//! move with the machine, and CI asserts the golden hashes instead.
+//! (decode plus an 80 px thumbnail, built both by a direct `resize` and by
+//! `thumbnail`, so the pre-decimation step can be measured against the path it
+//! replaced). It is not part of the test gate: timings move with the machine,
+//! and CI asserts the golden hashes instead.
 
 use std::hint::black_box;
 use std::io::Cursor;
 use std::time::Instant;
 
-use comical_image::{Filter, RgbImage, decode, probe_size, resize};
+use comical_image::{Filter, RgbImage, decode, probe_size, resize, thumbnail};
 use image::{DynamicImage, Frame, ImageFormat};
 
 /// Deterministic source page: gradients plus a little noise, so the encoders
@@ -117,17 +119,27 @@ fn main() {
             ((f64::from(image.height()) * scale).round() as u32).max(1),
         )
     };
-    let (_, thumb) = bench(|| {
+    let (_, thumb_direct) = bench(|| {
         black_box(resize(&image, thumb_dims.0, thumb_dims.1, Filter::Box).expect("thumbnail"));
+    });
+    let (_, thumb_fast) = bench(|| {
+        black_box(thumbnail(&image, thumb_dims.0, thumb_dims.1, Filter::Box).expect("thumbnail"));
     });
     let (_, decode_only) = bench(|| {
         black_box(decode(&jpeg, false).expect("decode"));
     });
     println!(
-        "\nper-page flow (jpeg): decode {decode_only:.2} ms + thumbnail to {}x{} {thumb:.2} ms \
+        "\nper-page flow (jpeg): decode {decode_only:.2} ms + thumbnail to {}x{} {thumb_fast:.2} ms \
          = {:.2} ms",
         thumb_dims.0,
         thumb_dims.1,
-        decode_only + thumb
+        decode_only + thumb_fast
+    );
+    println!(
+        "thumbnail alone to {}x{}: direct resize {thumb_direct:.2} ms, decimate first \
+         {thumb_fast:.2} ms ({:.2}x)",
+        thumb_dims.0,
+        thumb_dims.1,
+        thumb_direct / thumb_fast.max(1e-9)
     );
 }

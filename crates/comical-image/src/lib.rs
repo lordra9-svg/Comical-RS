@@ -14,7 +14,7 @@ use std::fmt;
 
 pub use decode::{MAX_DECODED_PIXELS, decode, exif_rotation, probe_size};
 pub use error::ImageError;
-pub use resize::{Filter, resize};
+pub use resize::{Filter, resize, thumbnail};
 pub use rotate::{Rotation, rotate};
 
 /// An opaque 8-bit RGB image in row-major order.
