@@ -19,6 +19,14 @@ toolbar, thumbnail browser, per-page rotation, RTL, and persistent settings.
 | `src/nav.rs` | Keyboard map |
 | `src/error.rs` | `AppError` |
 | `tests/open_book.rs` | Opens real directory books: natural size, sort order, remembered page, filter |
+| `build.rs` | Windows resources: icon, version information and application manifest |
+| `assets/comical.ico` | Application icon, 16 through 256 pixels |
+| `assets/windows.manifest` | Elevation level, DPI awareness and Windows version declaration |
+
+The window is drawn with the wgpu renderer, which uses DX12 or Vulkan on
+Windows and Vulkan or GLES elsewhere. The glow backend is not compiled in, so
+`eframe::NativeOptions::renderer` must stay `Renderer::Wgpu`; without it there
+is no fallback renderer to select.
 
 ## State
 

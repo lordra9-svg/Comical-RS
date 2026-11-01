@@ -5,6 +5,14 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- The Windows build actually runs on the wgpu renderer. `eframe` was built with
+  its default features, so the glow backend was still compiled in and eframe
+  selected OpenGL at runtime; glow is now turned off and the renderer is named
+  explicitly. The executable also carries an icon, version information and an
+  application manifest (asInvoker, per-monitor DPI, Windows 10/11, long paths),
+  where it previously had no `.rsrc` section at all.
+
 ### Changed
 - Repository tooling is Rust only. The `scripts/` shell scripts became the
   `ci`, `release` and `regen-corpus` subcommands of the `xtask` crate, which

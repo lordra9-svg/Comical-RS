@@ -45,6 +45,9 @@ pub fn run(path: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
 
     let s = app.settings();
     let options = eframe::NativeOptions {
+        // The crate is built without the glow backend, so name the renderer
+        // instead of relying on a default that no longer exists.
+        renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([s.window_width as f32, s.window_height as f32])
             .with_position([s.window_x as f32, s.window_y as f32])

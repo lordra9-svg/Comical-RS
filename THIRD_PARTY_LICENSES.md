@@ -35,6 +35,7 @@ This repository is MIT. These dependencies keep their own licenses.
 | `clap` | MIT OR Apache-2.0 | CLI |
 | `tempfile` | MIT OR Apache-2.0 | Test-only temporary directories |
 | `tar` | MIT OR Apache-2.0 | Dev-only release tarball |
+| `winresource` | MIT | Build-only: embeds the Windows icon, version info and manifest |
 | `xattr` | MIT OR Apache-2.0 | Extended attributes behind `tar` |
 | `serde` | MIT OR Apache-2.0 | Settings |
 | `serde_json` | MIT OR Apache-2.0 | Test vectors and corpus manifest |

@@ -1644,7 +1644,7 @@ impl eframe::App for App {
         }
     }
 
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+    fn on_exit(&mut self) {
         self.remember_current_page();
         self.sync_settings();
         self.settings.save();

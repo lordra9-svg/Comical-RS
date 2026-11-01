@@ -303,6 +303,8 @@ Desktop viewer. eframe/egui shell over the three product crates. Details:
 | `src/nav.rs` | Keyboard snapshot and map |
 | `src/error.rs` | `AppError` |
 | `tests/open_book.rs` | Directory book opens; page 0 decodes at natural size |
+| `build.rs` | Windows `.rsrc` section: icon, VERSIONINFO, manifest |
+| `assets/comical.ico`, `assets/windows.manifest` | Icon and manifest embedded on Windows |
 
 Key symbols:
 

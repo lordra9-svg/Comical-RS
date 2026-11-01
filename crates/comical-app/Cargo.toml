@@ -12,7 +12,15 @@ name = "comical"
 path = "src/main.rs"
 
 [dependencies]
-eframe = { version = "0.31", features = ["wgpu"] }
+# wgpu only, and explicitly: with the glow backend compiled in, eframe picks
+# OpenGL at runtime, which the wgpu feature was meant to replace.
+eframe = { version = "0.31", default-features = false, features = [
+    "accesskit",
+    "default_fonts",
+    "wayland",
+    "wgpu",
+    "x11",
+] }
 egui = "0.31"
 rfd = "0.17"
 thiserror = "2"
@@ -43,6 +51,16 @@ assets = [
     ["../../CHANGELOG.md", "usr/share/doc/comical/", "644"],
     ["../../README.md", "usr/share/doc/comical/", "644"],
 ]
+
+# eframe's wgpu integration turns wgpu's default features off, which also drops
+# wgpu's `dx12` backend, so Windows would be left with Vulkan and GLES only.
+# Named here purely to enable that backend; the app never calls wgpu directly.
+[target.'cfg(windows)'.dependencies]
+wgpu = { version = "24", default-features = false, features = ["dx12"] }
+
+[build-dependencies]
+# Emits the .rsrc section: icon, VERSIONINFO and manifest. Windows targets only.
+winresource = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
