@@ -106,10 +106,10 @@ headers that still parse, very large books, concurrent reads.
 
 `tests/images.rs` is the golden test. It reads
 `tests/vectors/images.json`, reconstructs the 17x11 source from `rgb_hex`,
-resizes every case and compares SHA-256 of the raw RGB8 output. A platform that
-does not reproduce the hash falls back to the recorded output bytes, with a
-two-step channel tolerance and a 1% differing-channel limit, because the sRGB
-transfer functions use the platform `powf`. It asserts all 42 cases and runs in
+resizes every case and compares SHA-256 of the raw RGB8 output. The sRGB tables
+are recorded data, so the hash reproduces on every platform; where it does not,
+the test falls back to the recorded output bytes with a two-step channel
+tolerance and a 1% differing-channel limit. It asserts all 42 cases and runs in
 debug and release.
 
 `tests/transform.rs` covers:

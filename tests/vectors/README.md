@@ -53,8 +53,9 @@ target with the named filter and hashes the raw RGB8 output.
 The hash is exact. Where a platform reproduces it, that is the whole
 comparison. Where it does not, the test falls back to `output_rgb_hex` and
 requires every channel within two steps of the oracle and at most 1% of
-channels differing at all. That absorbs the last bit of the platform `powf` in
-the sRGB transfer functions while still failing a kernel that moved a region.
+channels differing at all. The sRGB tables are recorded data, so the exact hash
+should always reproduce; the tolerance is a net for any last-bit difference that
+survives it, while still failing a kernel that moved a region.
 `output_rgb_hex` comes from
 `cargo run -p comical-image --example derive_expected_pixels`, which refuses to
 write unless the build reproduces every oracle hash first, so the recorded

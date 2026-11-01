@@ -8,6 +8,7 @@ mod decode;
 mod error;
 mod resize;
 mod rotate;
+mod srgb;
 
 use std::fmt;
 

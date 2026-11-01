@@ -1,92 +1,25 @@
 //! Separable two-pass resampling.
 
 use std::f64::consts::PI;
-use std::sync::LazyLock;
 
+use crate::srgb::{LINEAR_TO_SRGB_THRESHOLDS, SRGB_TO_LINEAR};
 use crate::{ImageError, RgbImage, allocate_rgb};
 
-static SRGB_TO_LINEAR: LazyLock<[f32; 256]> = LazyLock::new(|| {
-    let mut lut = [0.0f32; 256];
-    for (i, slot) in lut.iter_mut().enumerate() {
-        let c = i as f32 / 255.0;
-        *slot = if c <= 0.04045 {
-            c / 12.92
-        } else {
-            ((c + 0.055) / 1.055).powf(2.4)
-        };
-    }
-    lut
-});
-
-/// Number of intervals in the coarse linear-to-sRGB table.
+/// Converts a linear light channel to its sRGB byte.
 ///
-/// `powf` dominated resize time on full comic pages. The coarse table answers
-/// almost every channel with one lookup; the few intervals that contain a
-/// rounding boundary fall back to an exact threshold search, so the output
-/// bytes are unchanged.
-const LINEAR_TO_SRGB_INTERVALS: usize = 1 << 16;
-
-/// Smallest linear value whose round-to-nearest sRGB byte is at least the
-/// index. Entry 0 is zero and entry 256 is a sentinel above the valid range.
-static LINEAR_TO_SRGB_THRESHOLDS: LazyLock<[f32; 257]> = LazyLock::new(|| {
-    let mut thresholds = [0.0f32; 257];
-    for value in 1..=255u16 {
-        let target = value as u8;
-        let mut low = 0u32;
-        let mut high = 1.0f32.to_bits();
-        while low < high {
-            let mid = low + (high - low) / 2;
-            let candidate = f32::from_bits(mid);
-            if exact_linear_to_srgb(candidate) >= target {
-                high = mid;
-            } else {
-                low = mid + 1;
-            }
-        }
-        thresholds[value as usize] = f32::from_bits(low);
-    }
-    thresholds[256] = f32::INFINITY;
-    thresholds
-});
-
-static LINEAR_TO_SRGB_COARSE: LazyLock<Box<[u8]>> = LazyLock::new(|| {
-    (0..=LINEAR_TO_SRGB_INTERVALS)
-        .map(|index| exact_linear_to_srgb(index as f32 / LINEAR_TO_SRGB_INTERVALS as f32))
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
-});
-
-#[inline]
-fn exact_linear_to_srgb(c: f32) -> u8 {
-    let c = c.clamp(0.0, 1.0);
-    let srgb = if c <= 0.0031308 {
-        c * 12.92
-    } else {
-        1.055 * c.powf(1.0 / 2.4) - 0.055
-    };
-    (srgb * 255.0 + 0.5) as u8
-}
-
+/// `LINEAR_TO_SRGB_THRESHOLDS[value]` is the smallest linear value that rounds
+/// to `value` or above, so the search answers the exact curve without calling a
+/// transfer function. The table is data, which is what keeps the bytes the same
+/// on every platform; it replaces a coarse `powf`-derived lookup that could
+/// round differently off the recording platform.
 #[inline]
 fn linear_to_srgb(c: f32) -> u8 {
     let c = c.clamp(0.0, 1.0);
-    let index = (c * LINEAR_TO_SRGB_INTERVALS as f32) as usize;
-    if index >= LINEAR_TO_SRGB_INTERVALS {
-        return LINEAR_TO_SRGB_COARSE[LINEAR_TO_SRGB_INTERVALS];
-    }
-    let low = LINEAR_TO_SRGB_COARSE[index];
-    if low == LINEAR_TO_SRGB_COARSE[index + 1] {
-        return low;
-    }
-
-    // This interval contains at least one rounding boundary. Find the exact
-    // byte with the precomputed thresholds.
-    let thresholds = &*LINEAR_TO_SRGB_THRESHOLDS;
     let mut left = 0usize;
     let mut right = 256usize;
     while left + 1 < right {
         let mid = (left + right) / 2;
-        if thresholds[mid] <= c {
+        if LINEAR_TO_SRGB_THRESHOLDS[mid] <= c {
             left = mid;
         } else {
             right = mid;
@@ -402,6 +335,59 @@ pub fn resize(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The recorded sRGB tables must stay on the sRGB curve.
+    ///
+    /// The reference values here use the platform libm, so the comparison is
+    /// approximate; the point is to catch a table that drifted or a byte that
+    /// crossed a threshold, not to reproduce `powf` bit for bit.
+    #[test]
+    fn srgb_tables_stay_on_the_transfer_curve() {
+        for (byte, &linear) in SRGB_TO_LINEAR.iter().enumerate() {
+            let c = byte as f32 / 255.0;
+            let expected = if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            };
+            assert!(
+                (linear - expected).abs() <= expected.abs() * 1e-6 + f32::EPSILON,
+                "srgb byte {byte}: {linear} does not follow the curve ({expected})"
+            );
+        }
+
+        for step in 0..=1000 {
+            let c = step as f32 / 1000.0;
+            let srgb = if c <= 0.0031308 {
+                c * 12.92
+            } else {
+                1.055 * c.powf(1.0 / 2.4) - 0.055
+            };
+            let expected = (srgb * 255.0 + 0.5) as u8;
+            let actual = linear_to_srgb(c);
+            assert!(
+                actual.abs_diff(expected) <= 1,
+                "linear {c}: byte {actual}, curve says {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn linear_to_srgb_is_monotone_and_hits_both_ends() {
+        assert_eq!(linear_to_srgb(0.0), 0);
+        assert_eq!(linear_to_srgb(1.0), 255);
+
+        let mut previous = 0u8;
+        for step in 0..=4096 {
+            let value = linear_to_srgb(step as f32 / 4096.0);
+            assert!(value >= previous, "not monotone at step {step}");
+            previous = value;
+        }
+
+        for pair in LINEAR_TO_SRGB_THRESHOLDS.windows(2) {
+            assert!(pair[0] <= pair[1], "thresholds are not monotone");
+        }
+    }
 
     /// Maximum distance between the arithmetic `sin_pi` and the platform libm.
     ///

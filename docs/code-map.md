@@ -265,6 +265,7 @@ know about archives, spreads or UI.
 | `src/error.rs` | `ImageError` variants and messages |
 | `src/rotate.rs` | `Rotation` and index-remapped quarter turns |
 | `src/resize.rs` | `Filter`, contributions, two passes and target validation |
+| `src/srgb.rs` | sRGB transfer tables recorded as data, so no transfer function call is platform dependent |
 | `tests/decode.rs` | PNG RGB/RGBA, JPEG, GIF first frame and bad input |
 | `tests/images.rs` | All 42 golden filter hashes |
 | `tests/transform.rs` | Rotations, zero targets, buffer and dimension checks |

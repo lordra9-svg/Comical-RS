@@ -102,6 +102,15 @@ the macOS arm64 job fail while Linux and Windows passed. `resize::sin_pi` uses a
 Cody-Waite reduction by `PI/2` plus Taylor polynomials, so every target computes
 the same weights. The 42 golden hashes are unchanged by that substitution.
 
+Linear light needs the sRGB transfer curve, which is another `powf`. Those
+tables live in `src/srgb.rs` as recorded data: `SRGB_TO_LINEAR` is the
+byte-to-linear curve, and `LINEAR_TO_SRGB_THRESHOLDS` holds, for each output
+byte, the smallest linear value that rounds to it. The second pass is a binary
+search over those thresholds, so it never calls a transfer function. Committing
+the bits keeps the bytes identical on every platform, and it replaced the 64 KiB
+coarse table that used to exist to hide `powf` cost. The 42 golden hashes are
+unchanged.
+
 ## Golden vectors
 
 File: `tests/vectors/images.json`.
@@ -114,10 +123,12 @@ File: `tests/vectors/images.json`.
   bytes in `output_rgb_hex`.
 
 Test: `crates/comical-image/tests/images.rs`. It reconstructs the source,
-resizes, hashes and asserts every case. The hash is exact wherever the platform
-reproduces it. Where it does not, the test compares `output_rgb_hex` with a
-two-step channel tolerance and a 1% differing-channel limit, because `powf` in
-the sRGB transfer functions is the platform libm. `output_rgb_hex` is derived by
+resizes, hashes and asserts every case. Nothing on the resize path calls the C
+library, so the hash reproduces everywhere and is the whole comparison. The test
+keeps a fallback: where a hash does not reproduce, it compares `output_rgb_hex`
+with a two-step channel tolerance and a 1% differing-channel limit, so a future
+platform difference names the case, channel and delta instead of printing two
+opaque hashes. `output_rgb_hex` is derived by
 `examples/derive_expected_pixels.rs`, which refuses to run unless every oracle
 hash reproduces first.
 
