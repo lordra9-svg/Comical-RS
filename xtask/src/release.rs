@@ -48,7 +48,7 @@ pub fn run(version: Option<String>) -> Result<(), Box<dyn Error>> {
     if host == "windows" {
         windows(&root, &dist, &version)?;
     } else if target_installed(WINDOWS_GNU) && tool::command_exists(MINGW_CC) {
-        windows_cross(&root, &dist)?;
+        windows_cross(&root, &dist, &version)?;
     } else {
         println!("[windows] SKIP: not on Windows and no mingw-w64 cross toolchain on PATH");
     }
@@ -124,27 +124,12 @@ fn windows(root: &Path, dist: &Path, version: &str) -> Result<(), Box<dyn Error>
             .join("release/comical.exe"),
         dist.join("comical-windows-x86_64.exe"),
     )?;
-
-    if tool::command_exists("cargo-wix") {
-        println!("[windows-msi] cargo wix");
-        let output = dist.join(format!("comical-{version}-x86_64.msi"));
-        tool::cargo(&[
-            "wix",
-            "-p",
-            PACKAGE,
-            "--no-build",
-            "--nocapture",
-            "--output",
-            &output.to_string_lossy(),
-        ])?;
-    } else {
-        println!("[windows-msi] SKIP: cargo-wix not installed (cargo install cargo-wix)");
-    }
+    msi(dist, version)?;
     Ok(())
 }
 
 /// Cross-compiles the Windows executable from a non-Windows host.
-fn windows_cross(root: &Path, dist: &Path) -> Result<(), Box<dyn Error>> {
+fn windows_cross(root: &Path, dist: &Path, version: &str) -> Result<(), Box<dyn Error>> {
     println!("[windows] cargo build --release --target {WINDOWS_GNU} (cross)");
     tool::cargo(&[
         "build",
@@ -162,7 +147,52 @@ fn windows_cross(root: &Path, dist: &Path) -> Result<(), Box<dyn Error>> {
             .join("release/comical.exe"),
         dist.join("comical-windows-x86_64.exe"),
     )?;
+    msi(dist, version)?;
     Ok(())
+}
+
+/// Builds the MSI from the Windows executable already in `dist`.
+///
+/// The `.wxs` names its source through the `BinaryPath` preprocessor variable,
+/// so the MSI packages whichever binary this run produced instead of assuming
+/// the MSVC output path.
+fn msi(dist: &Path, version: &str) -> Result<(), Box<dyn Error>> {
+    if !tool::command_exists("cargo-wix") {
+        println!("[windows-msi] SKIP: cargo-wix not installed (cargo install cargo-wix)");
+        return Ok(());
+    }
+    let exe = dist.join("comical-windows-x86_64.exe");
+    if !exe.is_file() {
+        return Err(format!("windows-msi: {} does not exist", exe.display()).into());
+    }
+
+    let output = dist.join(format!("comical-{version}-x86_64.msi"));
+    println!("[windows-msi] cargo wix -> {}", output.display());
+    let args = wix_args(&exe, &output);
+    let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+    tool::cargo(&borrowed)?;
+
+    if !output.is_file() {
+        return Err(format!("windows-msi: cargo wix did not write {}", output.display()).into());
+    }
+    Ok(())
+}
+
+/// Command line for `cargo wix`, including the `candle` argument that points it
+/// at the binary this run built.
+fn wix_args(exe: &Path, output: &Path) -> Vec<String> {
+    vec![
+        "wix".to_owned(),
+        "-p".to_owned(),
+        PACKAGE.to_owned(),
+        "--no-build".to_owned(),
+        "--nocapture".to_owned(),
+        "--output".to_owned(),
+        output.to_string_lossy().into_owned(),
+        // Everything after `--` is forwarded to candle.
+        "--".to_owned(),
+        format!("-dBinaryPath={}", exe.display()),
+    ]
 }
 
 fn macos(root: &Path, dist: &Path) -> Result<(), Box<dyn Error>> {
@@ -398,6 +428,47 @@ mod tests {
                 sha256(&directory.path().join("a.bin")).expect("hash")
             )
         );
+    }
+
+    #[test]
+    fn wix_arguments_point_candle_at_the_built_binary() {
+        let exe = Path::new("/tmp/dist/comical-windows-x86_64.exe");
+        let output = Path::new("/tmp/dist/comical-1.2.3-x86_64.msi");
+        let args = wix_args(exe, output);
+
+        assert_eq!(args.first().map(String::as_str), Some("wix"));
+        let separator = args.iter().position(|arg| arg == "--").expect("-- gap");
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some("-dBinaryPath=/tmp/dist/comical-windows-x86_64.exe")
+        );
+        assert_eq!(separator + 1, args.len() - 1, "-d must follow --");
+        assert!(args.contains(&output.to_string_lossy().into_owned()));
+        assert!(args.contains(&"--no-build".to_owned()));
+    }
+
+    /// The MSI must not assume one toolchain's output path again.
+    #[test]
+    fn wix_source_is_a_variable_not_a_fixed_path() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/comical-app/wix/main.wxs");
+        let wxs = fs::read_to_string(&path).expect("read main.wxs");
+        assert!(wxs.contains("Source='$(var.BinaryPath)'"), "{wxs}");
+        assert!(!wxs.contains("x86_64-pc-windows-msvc/release"), "{wxs}");
+        assert!(
+            wxs.contains("<?define BinaryPath"),
+            "a default must keep a bare `cargo wix` working"
+        );
+    }
+
+    #[test]
+    fn msi_reports_a_missing_binary_instead_of_running_wix() {
+        if !tool::command_exists("cargo-wix") {
+            // The guard is only reachable where cargo-wix exists.
+            return;
+        }
+        let directory = tempfile::tempdir().expect("dist dir");
+        let error = msi(directory.path(), "1.2.3").expect_err("missing binary must fail");
+        assert!(error.to_string().contains("does not exist"), "{error}");
     }
 
     #[test]

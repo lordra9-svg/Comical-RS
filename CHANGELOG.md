@@ -19,6 +19,10 @@ All notable changes to Comical-RS are documented here. Format follows
   from Vulkan or GLES in a release build.
 
 ### Changed
+- The MSI packages the executable the release run actually built. The WiX
+  source takes its `Source` from a `BinaryPath` variable that `xtask release`
+  fills in, and the MSI step now also runs after a Linux cross build instead of
+  only on a Windows host.
 - Repository tooling is Rust only. The `scripts/` shell scripts became the
   `ci`, `release` and `regen-corpus` subcommands of the `xtask` crate, which
   removes the bash and Python dependency and behaves the same on Windows,
