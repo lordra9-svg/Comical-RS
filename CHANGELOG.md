@@ -5,6 +5,28 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-11-01
+
+### Changed
+- The sRGB transfer tables are recorded data in `comical-image/src/srgb.rs`
+  instead of values computed from `powf` at startup. `powf` is the platform
+  libm, so one table entry differing in its last bit could push a channel across
+  a rounding boundary and change an output byte. The linear-to-sRGB pass is now
+  a binary search over those thresholds, which removes the 64 KiB coarse lookup
+  table and never calls a transfer function. The 42 golden hashes are unchanged.
+- The golden image vectors record the oracle's output bytes for every case. The
+  SHA-256 stays the primary comparison; where a hash does not reproduce, the
+  test compares those bytes with a two-step channel tolerance and a 1% differing
+  channel limit, and names the case, channel and delta when it fails.
+
+### Fixed
+- `xtask`'s corpus manifest test no longer fails on a Windows checkout. Git
+  rewrote the committed JSON to CRLF there, so the regenerated file never
+  matched; `.gitattributes` now pins the manifest to LF and keeps the corpus
+  payloads binary.
+- macOS CI passes again: `lanczos3-2.0` was the one golden case where a platform
+  `powf` difference reached an output byte.
+
 ## [0.2.1] — 2026-11-01
 
 ### Added
