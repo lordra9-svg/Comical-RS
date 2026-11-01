@@ -5,6 +5,16 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- 0.2.2 answered every channel of the linear-to-sRGB pass with a binary search
+  over the recorded thresholds. That is correct and deterministic, but the
+  search lengthens the dependency chain inside the pixel loop: a 1600x1200 to
+  2080x1560 Catmull-Rom resize went from 194 ms to 592 ms, and the same-size box
+  case from 83 ms to 400 ms. The coarse table is back, derived from the recorded
+  thresholds instead of `powf`, so the bytes are unchanged and the resize is now
+  6% to 13% faster than 0.2.1 (77 ms, 73 ms, 172 ms and 76 ms for those four
+  benchmarks).
+
 ## [0.2.2] — 2026-11-01
 
 ### Changed

@@ -1,20 +1,22 @@
 //! Separable two-pass resampling.
 
 use std::f64::consts::PI;
+use std::sync::LazyLock;
 
 use crate::srgb::{LINEAR_TO_SRGB_THRESHOLDS, SRGB_TO_LINEAR};
 use crate::{ImageError, RgbImage, allocate_rgb};
 
-/// Converts a linear light channel to its sRGB byte.
+/// Number of intervals in the coarse back-conversion table.
+const LINEAR_TO_SRGB_INTERVALS: usize = 1 << 16;
+
+/// Converts a linear light channel to its sRGB byte by searching the recorded
+/// thresholds.
 ///
 /// `LINEAR_TO_SRGB_THRESHOLDS[value]` is the smallest linear value that rounds
 /// to `value` or above, so the search answers the exact curve without calling a
-/// transfer function. The table is data, which is what keeps the bytes the same
-/// on every platform; it replaces a coarse `powf`-derived lookup that could
-/// round differently off the recording platform.
+/// transfer function.
 #[inline]
-fn linear_to_srgb(c: f32) -> u8 {
-    let c = c.clamp(0.0, 1.0);
+fn search_linear_to_srgb(c: f32) -> u8 {
     let mut left = 0usize;
     let mut right = 256usize;
     while left + 1 < right {
@@ -26,6 +28,38 @@ fn linear_to_srgb(c: f32) -> u8 {
         }
     }
     left as u8
+}
+
+/// Coarse table for the common case, derived from the recorded thresholds.
+///
+/// The transfer curve is monotone, so an interval whose endpoints share a byte
+/// holds no boundary and the table answers it exactly. Only the intervals that
+/// straddle a boundary need [`search_linear_to_srgb`]. The table is built from
+/// recorded data, not from `powf`, so it cannot round differently off this
+/// platform; it exists because the search alone made the pixel loop slower.
+static LINEAR_TO_SRGB_COARSE: LazyLock<Box<[u8]>> = LazyLock::new(|| {
+    (0..=LINEAR_TO_SRGB_INTERVALS)
+        .map(|index| search_linear_to_srgb(index as f32 / LINEAR_TO_SRGB_INTERVALS as f32))
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+});
+
+/// Converts a linear light channel to its sRGB byte.
+///
+/// One coarse lookup answers almost every channel; the intervals containing a
+/// rounding boundary fall through to the threshold search.
+#[inline]
+fn linear_to_srgb(c: f32) -> u8 {
+    let c = c.clamp(0.0, 1.0);
+    let index = (c * LINEAR_TO_SRGB_INTERVALS as f32) as usize;
+    if index >= LINEAR_TO_SRGB_INTERVALS {
+        return LINEAR_TO_SRGB_COARSE[LINEAR_TO_SRGB_INTERVALS];
+    }
+    let low = LINEAR_TO_SRGB_COARSE[index];
+    if low == LINEAR_TO_SRGB_COARSE[index + 1] {
+        return low;
+    }
+    search_linear_to_srgb(c)
 }
 
 /// A resampling filter.

@@ -8,7 +8,7 @@
 //! oracle byte for byte, so regenerate them only where those vectors pass.
 
 /// sRGB byte to linear light, the exact `powf(2.4)` curve.
-pub(crate) const SRGB_TO_LINEAR: [f32; 256] = [
+pub(crate) static SRGB_TO_LINEAR: [f32; 256] = [
     f32::from_bits(0x00000000),
     f32::from_bits(0x399f22b4),
     f32::from_bits(0x3a1f22b4),
@@ -271,7 +271,7 @@ pub(crate) const SRGB_TO_LINEAR: [f32; 256] = [
 ///
 /// Entry 0 is zero and entry 256 is a sentinel above the valid range, so a
 /// binary search over the table answers every linear input with its byte.
-pub(crate) const LINEAR_TO_SRGB_THRESHOLDS: [f32; 257] = [
+pub(crate) static LINEAR_TO_SRGB_THRESHOLDS: [f32; 257] = [
     f32::from_bits(0x00000000),
     f32::from_bits(0x391f22b3),
     f32::from_bits(0x39eeb40e),

@@ -105,11 +105,19 @@ the same weights. The 42 golden hashes are unchanged by that substitution.
 Linear light needs the sRGB transfer curve, which is another `powf`. Those
 tables live in `src/srgb.rs` as recorded data: `SRGB_TO_LINEAR` is the
 byte-to-linear curve, and `LINEAR_TO_SRGB_THRESHOLDS` holds, for each output
-byte, the smallest linear value that rounds to it. The second pass is a binary
-search over those thresholds, so it never calls a transfer function. Committing
-the bits keeps the bytes identical on every platform, and it replaced the 64 KiB
-coarse table that used to exist to hide `powf` cost. The 42 golden hashes are
-unchanged.
+byte, the smallest linear value that rounds to it. Nothing on the resize path
+calls a transfer function, so the bytes are the same on every platform and the
+42 golden hashes are unchanged.
+
+Keep the coarse back-conversion table. `LINEAR_TO_SRGB_COARSE` answers an
+interval of the curve with one lookup, and only the intervals that straddle a
+rounding boundary fall through to the threshold search. It is built at startup
+from the recorded thresholds, never from `powf`, so it cannot round differently
+off this platform. An attempt to answer every channel with the search alone was
+correct and deterministic but 1.9x to 4.8x slower end to end on these targets,
+because the search lengthens the dependency chain in the pixel loop; with the
+coarse table the resize is 6% to 13% faster than 0.2.1. Measure before removing
+it (`examples/bench_resize.rs`).
 
 ## Golden vectors
 
