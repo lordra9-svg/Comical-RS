@@ -424,8 +424,13 @@ mod tests {
     #[test]
     fn manifest_reproduces_the_committed_file() {
         let root = workspace_root().expect("workspace root");
-        let expected =
-            fs::read_to_string(root.join("tests/corpus/manifest.json")).expect("committed file");
+        // Checkouts made before .gitattributes pinned this file, or with a
+        // core.autocrlf setting of their own, may hand us CRLF. Line endings are
+        // not part of the manifest, so normalize them and still compare the
+        // bytes (formatting, key order, hashes) exactly.
+        let expected = fs::read_to_string(root.join("tests/corpus/manifest.json"))
+            .expect("committed file")
+            .replace("\r\n", "\n");
         let regenerated = manifest(&root.join("tests/corpus/pages")).expect("manifest");
         let actual = serde_json::to_string_pretty(&regenerated).expect("json") + "\n";
         assert_eq!(actual, expected);

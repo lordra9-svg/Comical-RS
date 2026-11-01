@@ -1,0 +1,7 @@
+# The corpus manifest is regenerated and compared byte for byte, so it must
+# never be rewritten with CRLF line endings on Windows checkouts.
+tests/corpus/manifest.json text eol=lf
+
+# Corpus payloads are archives and image bytes: never touch their endings.
+tests/corpus/fixtures/** -text
+tests/corpus/pages/** -text
