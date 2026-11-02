@@ -28,6 +28,11 @@ on:
         required: false
         type: string
         default: ""
+      macos_runner:
+        description: "Runner label for the macOS job, for example macos-13 when macos-latest is queued."
+        required: false
+        type: string
+        default: "macos-latest"
 
 concurrency:
   group: release-${{ inputs.tag }}
@@ -88,7 +93,9 @@ jobs:
 
   macos:
     name: macOS app
-    runs-on: macos-latest
+    # Both images can build the universal bundle; the input is a way out when
+    # one pool is out of capacity and the job sits queued until it is cancelled.
+    runs-on: ${{ inputs.macos_runner || 'macos-latest' }}
     timeout-minutes: 45
 
     steps:

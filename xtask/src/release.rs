@@ -608,6 +608,48 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn app_zip_keeps_bundle_paths_and_the_executable_bit() {
+        let directory = tempfile::tempdir().expect("dir");
+        let app = directory.path().join("Comical.app");
+        let contents = app.join("Contents");
+        fs::create_dir_all(contents.join("MacOS")).expect("create bundle");
+        fs::write(contents.join("Info.plist"), b"<plist/>").expect("write plist");
+        let executable = contents.join("MacOS").join(BINARY);
+        fs::write(&executable, b"binary").expect("write executable");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))
+                .expect("make executable");
+        }
+
+        let archive = directory.path().join("app.zip");
+        write_app_zip(&app, &archive).expect("zip the bundle");
+
+        let mut zip =
+            zip::ZipArchive::new(fs::File::open(&archive).expect("open zip")).expect("read zip");
+        let mut names = Vec::new();
+        for index in 0..zip.len() {
+            let entry = zip.by_index(index).expect("entry");
+            names.push(entry.name().expect("member name").into_owned());
+        }
+        assert!(
+            names.contains(&"Comical.app/Contents/Info.plist".to_owned()),
+            "{names:?}"
+        );
+        assert!(
+            names.contains(&"Comical.app/Contents/MacOS/comical".to_owned()),
+            "{names:?}"
+        );
+
+        let entry = zip
+            .by_name(&format!("Comical.app/Contents/MacOS/{BINARY}"))
+            .expect("executable entry");
+        #[cfg(unix)]
+        assert_eq!(entry.unix_mode().map(|mode| mode & 0o777), Some(0o755));
+    }
+
     fn wixl_arguments_carry_arch_ext_and_both_variables() {
         let source = Path::new("/repo/crates/comical-app/wix/main.wxs");
         let exe = Path::new("/repo/dist/comical-windows-x86_64.exe");
