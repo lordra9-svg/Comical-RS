@@ -89,6 +89,14 @@ fn main() {
         ("webp", &webp),
         ("gif", &gif),
     ];
+    let filters = [
+        Filter::Box,
+        Filter::Bilinear,
+        Filter::Bicubic,
+        Filter::BSpline,
+        Filter::CatmullRom,
+        Filter::Lanczos3,
+    ];
 
     println!("one 1600x1200 page, median ms per call");
     for (name, bytes) in cases {
@@ -119,27 +127,55 @@ fn main() {
             ((f64::from(image.height()) * scale).round() as u32).max(1),
         )
     };
-    let (_, thumb_direct) = bench(|| {
-        black_box(resize(&image, thumb_dims.0, thumb_dims.1, Filter::Box).expect("thumbnail"));
-    });
-    let (_, thumb_fast) = bench(|| {
-        black_box(thumbnail(&image, thumb_dims.0, thumb_dims.1, Filter::Box).expect("thumbnail"));
-    });
     let (_, decode_only) = bench(|| {
         black_box(decode(&jpeg, false).expect("decode"));
     });
+
+    // The `image` crate's own decode, without our RGB8 conversion and limit
+    // bookkeeping, so the remaining decode time can be attributed.
+    let (_, raw_decode) = bench(|| {
+        black_box(image::load_from_memory(black_box(&jpeg)).expect("image decode"));
+    });
     println!(
-        "\nper-page flow (jpeg): decode {decode_only:.2} ms + thumbnail to {}x{} {thumb_fast:.2} ms \
-         = {:.2} ms",
-        thumb_dims.0,
-        thumb_dims.1,
-        decode_only + thumb_fast
+        "\ndecode breakdown (jpeg): image crate {raw_decode:.2} ms, comical-image decode \
+         {decode_only:.2} ms, so RGB8 conversion and limits cost {:.2} ms",
+        (decode_only - raw_decode).max(0.0)
     );
+
     println!(
-        "thumbnail alone to {}x{}: direct resize {thumb_direct:.2} ms, decimate first \
-         {thumb_fast:.2} ms ({:.2}x)",
-        thumb_dims.0,
-        thumb_dims.1,
-        thumb_direct / thumb_fast.max(1e-9)
+        "\nthumbnail 1600x1200 -> {}x{}, median ms: direct `resize` against the decimated \
+         `thumbnail`, and the largest channel difference between them",
+        thumb_dims.0, thumb_dims.1
+    );
+    for filter in filters {
+        let (_, direct) = bench(|| {
+            black_box(resize(&image, thumb_dims.0, thumb_dims.1, filter).expect("resize"));
+        });
+        let (_, decimated) = bench(|| {
+            black_box(thumbnail(&image, thumb_dims.0, thumb_dims.1, filter).expect("thumbnail"));
+        });
+        let direct_image = resize(&image, thumb_dims.0, thumb_dims.1, filter).expect("resize");
+        let decimated_image =
+            thumbnail(&image, thumb_dims.0, thumb_dims.1, filter).expect("thumbnail");
+        let max_delta = direct_image
+            .pixels()
+            .iter()
+            .zip(decimated_image.pixels())
+            .map(|(&a, &b)| a.abs_diff(b))
+            .max()
+            .unwrap_or(0);
+        println!(
+            "{:<11} {direct:7.2} ms -> {decimated:7.2} ms ({:.2}x)  max delta {max_delta}",
+            format!("{filter:?}"),
+            direct / decimated.max(1e-9)
+        );
+    }
+    let (_, thumb_box) = bench(|| {
+        black_box(thumbnail(&image, thumb_dims.0, thumb_dims.1, Filter::Box).expect("thumbnail"));
+    });
+    println!(
+        "\nper-page flow (jpeg, Box): decode {decode_only:.2} ms + thumbnail {thumb_box:.2} ms \
+         = {:.2} ms",
+        decode_only + thumb_box
     );
 }

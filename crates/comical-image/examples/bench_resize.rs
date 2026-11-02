@@ -75,7 +75,13 @@ fn main() {
     ];
     // A reader view caps the long side at 2048 px, so a comic page is usually
     // scaled down to fit; upscaling matters for small pages read full-screen.
-    let targets = [(1200, 900, "down 0.75x"), (2080, 1560, "up 1.3x")];
+    // The same-size case has no taps worth speaking of at scale 1.0, so it
+    // isolates the fixed per-pixel cost of the passes.
+    let targets = [
+        (1600, 1200, "same 1.0x"),
+        (1200, 900, "down 0.75x"),
+        (2080, 1560, "up 1.3x"),
+    ];
 
     println!("resize from 1600x1200, median ms, output MPix/s, and output checksum");
     for (width, height, label) in targets {

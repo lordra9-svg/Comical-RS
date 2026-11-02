@@ -212,13 +212,13 @@ with the machine.
 ```text
 cargo run -p comical-image --release --example bench_decode
 cargo run -p comical-image --release --example bench_resize
-```
-
-- `bench_decode` encodes one 1600x1200 page to PNG, JPEG, GIF and WebP, then
-times `probe_size` with and without EXIF, `decode`, and the per-page flow (decode
-plus an 80 px thumbnail).
-- `bench_resize` times every filter, downscaling to 1200x900 and upscaling to
-  2080x1560, and prints output MPix/s.
+```- `bench_decode` encodes one 1600x1200 page to PNG, JPEG, GIF and WebP, then
+  times `probe_size` with and without EXIF, `decode`, the JPEG decode split
+  between the `image` crate and this crate's RGB8 conversion, and every filter
+  on the 80 px strip (direct `resize` against `thumbnail`, plus the largest
+  channel difference between the two).
+- `bench_resize` times every filter at 1.0x, downscaling to 1200x900 and
+  upscaling to 2080x1560, and prints output MPix/s and a checksum.
 
 Each case runs seven timed blocks of about 200 ms and reports the median and the
 best. The checksum is FNV-1a over the output pixels: two builds that print the
@@ -230,20 +230,43 @@ Recorded on an 8-core Linux VM in release mode, median milliseconds for one
 
 | Stage | Time |
 |---|---:|
-| `decode` PNG, JPEG, GIF | 12.6, 12.3, 12.8 |
-| `decode` WebP | 27.5 |
-| `probe_size`, with or without EXIF | at most 0.16 |
-| resize to 1200x900, Box through Lanczos3 | 64 to 104 |
-| resize to 2080x1560, Box through Lanczos3 | 116 to 212 |
-| 80x60 thumbnail: direct `resize` / `thumbnail` | 8.4 / 2.7 |
+| `decode` PNG, JPEG, GIF | 11.7, 10.8, 12.3 |
+| `decode` WebP | 26.9 |
+| `probe_size`, with or without EXIF | at most 0.13 |
+| resize 1600x1200 to the same size, Box through Lanczos3 | 84 to 130 |
+| resize to 1200x900, Box through Lanczos3 | 64 to 106 |
+| resize to 2080x1560, Box through Lanczos3 | 117 to 210 |
+| 80x60 thumbnail, Box: direct `resize` / `thumbnail` | 8.4 / 2.6 |
 
-The resampler is the expensive stage, not the decoder: one 1.08 MPix result
-costs five to eight times the full 1.92 MPix decode. Inside it the fixed
-per-channel cost dominates the taps, because Bilinear (two taps) to Lanczos3
-(nine taps) is only 1.6x the time, so a narrower kernel buys little. Thumbnails
-are charged per page: a direct convolution of the whole page to the strip cost
-8.4 ms, and decimating the source first (see [Thumbnails](#thumbnails)) brings
-that to 2.7 ms, which moves the per-page flow from 20.0 ms to 13.7 ms.
+The resampler is the expensive stage, not the decoder, and the same-size case
+shows why: at scale 1.0 each axis has one or two taps, yet Box still costs
+84 ms for 1.92 MPix. The fixed per-pixel work of two passes (transfer to linear,
+accumulate, transfer back, write) is about 44 ns per pixel, and the taps only
+add on top: Lanczos3 at the same size is 130 ms, so a narrower kernel buys
+little. A page displayed at 1200x900 therefore costs 64 to 106 ms against an
+11 ms decode, which makes the reading view, not the decoder, the largest
+remaining per-page cost.
+
+Thumbnails are charged per page and are no longer part of that. Every filter on
+the strip, measured against the direct convolution:
+
+| Filter | direct `resize` | `thumbnail` | gain | worst channel delta |
+|---|---:|---:|---:|---:|
+| Box | 8.4 | 2.6 | 3.2x | 18 |
+| Bilinear | 15.7 | 2.7 | 5.8x | 16 |
+| Bicubic | 30.6 | 2.8 | 10.8x | 15 |
+| B-spline | 31.0 | 2.8 | 10.9x | 11 |
+| Catmull-Rom | 30.7 | 2.9 | 10.5x | 17 |
+| Lanczos3 | 46.1 | 3.1 | 15.0x | 17 |
+
+Decimating first brings the strip to a roughly constant 2.6 to 3.1 ms, because
+the second stage runs at scale 0.5 and the pre-pass costs the same whatever the
+filter. The sharper the kernel, the bigger the win, so a better strip is now
+nearly free: Lanczos3 costs 0.5 ms more than Box. The last column is the
+largest single-channel difference from the direct convolution on this noisy
+fixture, 11 to 18 bytes; it is the pre-pass rounding once, not a different
+window, and the tolerance test pins a smooth gradient at 4. The per-page flow,
+decode plus a Box thumbnail, is 13.6 ms.
 
 ## Maintenance
 
@@ -281,7 +304,8 @@ Do not edit the expected hash to make the test pass.
 - No animated GIF playback; first frame only.
 - No WebP, AVIF or TIFF.
 - No ICC profile or color-space conversion policy.
-- No thumbnail helper yet; the 60/100 px rule is still in the spec.
+- No reduced-size decode: a page is always decoded at full resolution, so the
+  strip still pays the full decode even though its own cost is now 2.6 ms.
 - No image corpus with real-world files.
 - No fuzzing of decoders.
 - No zero-copy decode path.
