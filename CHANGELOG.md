@@ -5,6 +5,17 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+- Both resampling passes walk rows instead of pixels. The horizontal pass
+  converts one source row to linear light and reads every window out of it, and
+  the vertical pass accumulates a whole destination row while the taps walk
+  whole source rows, so the inner loop stays inside one row. Each output
+  channel still starts at zero and adds its taps in the same order and scale 1.0
+  still takes the full path, so the 42 golden hashes and every benchmark
+  checksum are unchanged. The reading view gets faster: Catmull-Rom from
+  1600x1200 to 1200x900 drops from 86.5 ms to 70.4 ms, and the `bench_resize`
+  matrix improves 13% to 29% at 1.0x, 0.75x and 1.3x.
+
 ## [0.2.3] — 2026-11-02
 
 ### Changed

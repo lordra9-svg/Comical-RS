@@ -233,19 +233,32 @@ Recorded on an 8-core Linux VM in release mode, median milliseconds for one
 | `decode` PNG, JPEG, GIF | 11.7, 10.8, 12.3 |
 | `decode` WebP | 26.9 |
 | `probe_size`, with or without EXIF | at most 0.13 |
-| resize 1600x1200 to the same size, Box through Lanczos3 | 84 to 130 |
-| resize to 1200x900, Box through Lanczos3 | 64 to 106 |
-| resize to 2080x1560, Box through Lanczos3 | 117 to 210 |
+| resize 1600x1200 to the same size, Box through Lanczos3 | 76 to 100 |
+| resize to 1200x900, Box through Lanczos3 | 53 to 81 |
+| resize to 2080x1560, Box through Lanczos3 | 95 to 165 |
 | 80x60 thumbnail, Box: direct `resize` / `thumbnail` | 8.4 / 2.6 |
 
 The resampler is the expensive stage, not the decoder, and the same-size case
 shows why: at scale 1.0 each axis has one or two taps, yet Box still costs
-84 ms for 1.92 MPix. The fixed per-pixel work of two passes (transfer to linear,
-accumulate, transfer back, write) is about 44 ns per pixel, and the taps only
-add on top: Lanczos3 at the same size is 130 ms, so a narrower kernel buys
-little. A page displayed at 1200x900 therefore costs 64 to 106 ms against an
+76 ms for 1.92 MPix. The fixed per-pixel work of two passes (transfer to linear,
+accumulate, transfer back, write) is about 40 ns per pixel, and the taps only
+add on top: Lanczos3 at the same size is 100 ms, so a narrower kernel buys
+little. A page displayed at 1200x900 therefore costs 53 to 81 ms against an
 11 ms decode, which makes the reading view, not the decoder, the largest
 remaining per-page cost.
+
+That cost was 13% to 29% higher before the passes were reordered to walk rows
+instead of pixels. The horizontal pass now converts one source row to linear
+light and reads every window out of it, and the vertical pass accumulates a
+whole destination row while the taps walk whole source rows, so the inner loop
+stays inside a row that fits in cache. Each output channel still starts at zero
+and adds its taps in the same order, and scale 1.0 still takes the full path, so
+the bytes do not change: every checksum below is identical to the run before the
+change, and the 42 golden hashes still pass. Measured back to back on the same
+machine, Catmull-Rom from 1600x1200 to 1200x900 went from 86.5 ms to 70.4 ms and
+Lanczos3 to 2080x1560 from 213.6 ms to 164.7 ms. Do not "fix" the residual cost
+with an equal-size shortcut: the transfer round trip is not the identity, so a
+bypass would change output bytes.
 
 Thumbnails are charged per page and are no longer part of that. Every filter on
 the strip, measured against the direct convolution:

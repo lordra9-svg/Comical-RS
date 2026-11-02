@@ -269,19 +269,28 @@ fn horizontal(
     let mut out = allocate_rgb(dst_w, height)?;
     let src_stride = src_w as usize * 3;
     let dst_stride = dst_w as usize * 3;
+    // One source row in linear light, converted once per row and then read by
+    // every overlapping window in that row. The table value is the same `f32`
+    // the multiplication would have read, so each sum keeps its order and the
+    // output is unchanged.
+    let mut linear = vec![0.0f32; src_stride];
 
     for y in 0..height as usize {
-        let src_row = y * src_stride;
+        let src_row = &src[y * src_stride..][..src_stride];
+        for (slot, &byte) in linear.iter_mut().zip(src_row) {
+            *slot = SRGB_TO_LINEAR[byte as usize];
+        }
         let dst_row = y * dst_stride;
         for (dst_x, contribution) in contributions.iter().enumerate() {
+            let start = contribution.start * 3;
+            let window = &linear[start..start + contribution.weights.len() * 3];
             let mut red = 0.0f32;
             let mut green = 0.0f32;
             let mut blue = 0.0f32;
-            for (offset, &weight) in contribution.weights.iter().enumerate() {
-                let index = src_row + (contribution.start + offset) * 3;
-                red += SRGB_TO_LINEAR[src[index] as usize] * weight;
-                green += SRGB_TO_LINEAR[src[index + 1] as usize] * weight;
-                blue += SRGB_TO_LINEAR[src[index + 2] as usize] * weight;
+            for (pixel, &weight) in window.chunks(3).zip(&contribution.weights) {
+                red += pixel[0] * weight;
+                green += pixel[1] * weight;
+                blue += pixel[2] * weight;
             }
             let index = dst_row + dst_x * 3;
             out[index] = linear_to_srgb(red);
@@ -304,24 +313,24 @@ fn vertical(
     let contributions = contributions(src_h as usize, dst_h as usize, filter);
     let mut out = allocate_rgb(width, dst_h)?;
     let stride = width as usize * 3;
+    // One whole destination row accumulates in `acc`, and the taps are applied
+    // from the outside in, so the inner loop walks a source row linearly. Every
+    // output channel still starts at zero and adds its taps in the same order
+    // as a per-pixel loop would, so the bytes do not change.
+    let mut acc = vec![0.0f32; stride];
 
     for (dst_y, contribution) in contributions.iter().enumerate() {
-        let dst_row = dst_y * stride;
-        for x in 0..width as usize {
-            let column = x * 3;
-            let mut red = 0.0f32;
-            let mut green = 0.0f32;
-            let mut blue = 0.0f32;
-            for (offset, &weight) in contribution.weights.iter().enumerate() {
-                let index = (contribution.start + offset) * stride + column;
-                red += SRGB_TO_LINEAR[src[index] as usize] * weight;
-                green += SRGB_TO_LINEAR[src[index + 1] as usize] * weight;
-                blue += SRGB_TO_LINEAR[src[index + 2] as usize] * weight;
+        acc.fill(0.0);
+        for (offset, &weight) in contribution.weights.iter().enumerate() {
+            let row = (contribution.start + offset) * stride;
+            let src_row = &src[row..][..stride];
+            for (slot, &byte) in acc.iter_mut().zip(src_row) {
+                *slot += SRGB_TO_LINEAR[byte as usize] * weight;
             }
-            let index = dst_row + column;
-            out[index] = linear_to_srgb(red);
-            out[index + 1] = linear_to_srgb(green);
-            out[index + 2] = linear_to_srgb(blue);
+        }
+        let dst_row = dst_y * stride;
+        for (out_byte, &value) in out[dst_row..][..stride].iter_mut().zip(&acc) {
+            *out_byte = linear_to_srgb(value);
         }
     }
 
