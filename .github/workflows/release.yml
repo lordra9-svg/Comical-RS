@@ -29,10 +29,10 @@ on:
         type: string
         default: ""
       macos_runner:
-        description: "Runner label for the macOS job, for example macos-13 when macos-latest is queued."
+        description: "Runner label for the macOS job, for example macos-15-intel when macos-15 is queued."
         required: false
         type: string
-        default: "macos-latest"
+        default: "macos-15"
 
 concurrency:
   group: release-${{ inputs.tag }}
@@ -93,9 +93,11 @@ jobs:
 
   macos:
     name: macOS app
-    # Both images can build the universal bundle; the input is a way out when
-    # one pool is out of capacity and the job sits queued until it is cancelled.
-    runs-on: ${{ inputs.macos_runner || 'macos-latest' }}
+    # Pinned rather than `macos-latest`: the image behind the alias is retired
+    # on a schedule, and a job that never gets a runner only shows up as a
+    # cancellation fifteen minutes later. Both current images can build the
+    # universal bundle, and the input is a way out when one pool is empty.
+    runs-on: ${{ inputs.macos_runner || 'macos-15' }}
     timeout-minutes: 45
 
     steps:
