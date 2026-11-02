@@ -5,6 +5,8 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-11-02
+
 ### Changed
 - Both resampling passes walk rows instead of pixels. The horizontal pass
   converts one source row to linear light and reads every window out of it, and
