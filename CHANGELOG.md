@@ -5,6 +5,8 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-11-02
+
 ### Changed
 - `comical-image` has a `thumbnail` function that averages blocks of the source
   down to twice the target, in linear light, before running the same filter. A
@@ -20,6 +22,16 @@ All notable changes to Comical-RS are documented here. Format follows
   decode path and every resampling filter and print a checksum of each output,
   so a change can be compared against the previous build. `docs/image.md`
   records the recorded baseline and how to read it.
+- `bench_decode` now sweeps every filter for the 80 px strip, direct `resize`
+  against decimated `thumbnail` plus the largest channel difference between the
+  two, and splits the JPEG decode into the `image` crate's own work and this
+  crate's RGB8 conversion. A sharper strip costs little in the decimated path
+  (2.6 ms for Box, 3.1 ms for Lanczos3, against 8.4 ms to 46.1 ms direct), and
+  the split puts 10.7 ms of the 11.0 ms decode inside the decoder. `bench_resize`
+  gained a same-size case that isolates the fixed per-pixel cost: 84 ms for Box
+  on a 1600x1200 page, where the taps cannot explain it. The reading view's
+  resize to 1200x900 (64 to 106 ms) is therefore the largest remaining per-page
+  cost, ahead of the 11 ms decode.
 
 ### Fixed
 - 0.2.2 answered every channel of the linear-to-sRGB pass with a binary search
