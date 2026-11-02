@@ -608,7 +608,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn app_zip_keeps_bundle_paths_and_the_executable_bit() {
         let directory = tempfile::tempdir().expect("dir");
         let app = directory.path().join("Comical.app");
@@ -650,6 +649,7 @@ mod tests {
         assert_eq!(entry.unix_mode().map(|mode| mode & 0o777), Some(0o755));
     }
 
+    #[test]
     fn wixl_arguments_carry_arch_ext_and_both_variables() {
         let source = Path::new("/repo/crates/comical-app/wix/main.wxs");
         let exe = Path::new("/repo/dist/comical-windows-x86_64.exe");
