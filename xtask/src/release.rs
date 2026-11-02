@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use sha2::{Digest, Sha256};
+use zip::write::SimpleFileOptions as ZipFileOptions;
+use zip::{CompressionMethod, ZipWriter as ZapWriter};
 
 use crate::tool;
 
@@ -22,6 +24,8 @@ const BINARY: &str = "comical";
 const WINDOWS_MSVC: &str = "x86_64-pc-windows-msvc";
 const WINDOWS_GNU: &str = "x86_64-pc-windows-gnu";
 const MINGW_CC: &str = "x86_64-w64-mingw32-gcc";
+/// macOS targets, combined into one universal bundle when both are installed.
+const MACOS_TARGETS: [&str; 2] = ["aarch64-apple-darwin", "x86_64-apple-darwin"];
 
 /// Builds every artifact this host supports into `target/release-dist`.
 pub fn run(version: Option<String>) -> Result<(), Box<dyn Error>> {
@@ -54,7 +58,7 @@ pub fn run(version: Option<String>) -> Result<(), Box<dyn Error>> {
     }
 
     if host == "macos" {
-        macos(&root, &dist)?;
+        macos(&root, &dist, &version)?;
     } else {
         println!("[macos] SKIP: not on macOS");
     }
@@ -250,18 +254,106 @@ fn wix_args(exe: &Path, output: &Path) -> Vec<String> {
     ]
 }
 
-fn macos(root: &Path, dist: &Path) -> Result<(), Box<dyn Error>> {
+fn macos(root: &Path, dist: &Path, version: &str) -> Result<(), Box<dyn Error>> {
     if !tool::command_exists("cargo-bundle") {
         println!("[macos] SKIP: cargo-bundle not installed (cargo install cargo-bundle)");
         return Ok(());
     }
-    println!("[macos] cargo bundle --release");
-    tool::cargo(&["bundle", "--release", "-p", PACKAGE])?;
-    copy_directory(
-        &root.join("target/release/bundle/osx/Comical.app"),
-        &dist.join("Comical.app"),
-    )?;
+    // Both targets when rustup has them: cargo-bundle combines them with `lipo`,
+    // so one download runs natively on Apple silicon and on Intel.
+    let universal = MACOS_TARGETS.iter().all(|target| target_installed(target));
+    let mut args = vec!["bundle", "--release", "-p", PACKAGE];
+    if universal {
+        for target in MACOS_TARGETS {
+            args.push("--target");
+            args.push(target);
+        }
+    }
+    println!(
+        "[macos] cargo bundle --release{}",
+        if universal { " (universal)" } else { "" }
+    );
+    tool::cargo(&args)?;
+
+    let app = root.join("target/release/bundle/osx/Comical.app");
+    copy_directory(&app, &dist.join("Comical.app"))?;
+
+    // A bundle is a directory and a release asset has to be a file, so the
+    // published artifact is the zipped bundle.
+    let arch = if universal {
+        "universal"
+    } else {
+        std::env::consts::ARCH
+    };
+    let archive = dist.join(format!("comical-{version}-macos-{arch}.zip"));
+    println!(
+        "[macos-zip] {}",
+        archive.file_name().unwrap_or_default().to_string_lossy()
+    );
+    write_app_zip(&app, &archive)?;
     Ok(())
+}
+
+/// Zips a `.app` bundle with its paths relative to the bundle directory.
+fn write_app_zip(app: &Path, destination: &Path) -> Result<(), Box<dyn Error>> {
+    let root = app
+        .file_name()
+        .ok_or_else(|| format!("macos-zip: {} has no directory name", app.display()))?;
+    let mut writer = ZapWriter::new(fs::File::create(destination)?);
+    zip_directory(&mut writer, app, Path::new(root))?;
+    writer.finish()?;
+    Ok(())
+}
+
+/// Adds one bundle directory and everything under it.
+///
+/// Entries are sorted so two runs of the same build produce the same order,
+/// and the executable bit is carried over: without it the app will not launch.
+fn zip_directory(
+    writer: &mut ZapWriter<fs::File>,
+    directory: &Path,
+    prefix: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let mut entries = fs::read_dir(directory)?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()?;
+    entries.sort();
+
+    for path in entries {
+        let name = prefix.join(path.file_name().unwrap_or_default());
+        let name = name.to_string_lossy().into_owned();
+        if path.is_dir() {
+            let child = name.clone();
+            writer.add_directory(name, ZipFileOptions::default())?;
+            zip_directory(writer, &path, Path::new(&child))?;
+        } else {
+            let permissions = if is_executable(&path) { 0o755 } else { 0o644 };
+            let options = ZipFileOptions::default()
+                .compression_method(CompressionMethod::Deflated)
+                .unix_permissions(permissions);
+            writer.start_file(name, options)?;
+            let mut source = fs::File::open(&path)?;
+            std::io::copy(&mut source, writer)?;
+        }
+    }
+    Ok(())
+}
+
+/// Whether the file carries an executable bit. Only macOS builds run this, but
+/// the module also compiles on Windows, where the mode does not exist.
+fn is_executable(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(path)
+            .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        false
+    }
 }
 
 /// Writes a gzipped tar archive holding a single file.

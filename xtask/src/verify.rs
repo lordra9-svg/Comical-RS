@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 
 use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
+use zip::ZipArchive;
 
 use crate::msi;
 use crate::release;
@@ -28,6 +29,9 @@ const IMAGE_SUBSYSTEM_WINDOWS_GUI: u16 = 2;
 /// Imports the Windows executable must keep: the OS, the window layer and the
 /// DX12 shader compiler that only arrives with wgpu's `dx12` backend.
 const REQUIRED_IMPORTS: [&str; 3] = ["KERNEL32.dll", "USER32.dll", "d3dcompiler_47.dll"];
+/// The two paths inside the zipped macOS bundle that packaging depends on.
+const MACOS_PLIST: &str = "Comical.app/Contents/Info.plist";
+const MACOS_EXECUTABLE: &str = "Comical.app/Contents/MacOS/comical";
 /// Installer strings that prove the associations and the shortcut survived.
 /// The registry component is the one a careless edit to the WiX source drops.
 const REQUIRED_MSI_STRINGS: [&str; 10] = [
@@ -88,6 +92,8 @@ pub fn run(directory: Option<String>) -> Result<(), Box<dyn Error>> {
             report.check(check_deb(path));
         } else if name.ends_with(".msi") {
             report.check(check_msi(path));
+        } else if name.ends_with(".zip") {
+            report.check(check_macos_zip(path));
         } else {
             println!("  ok      {name} ({size} bytes)");
         }
@@ -239,6 +245,75 @@ fn check_tarball(path: &Path, member: &str, reference: Option<&Path>) -> Result<
     Ok(format!(
         "{name}: {member}, {} bytes, mode 755, owner 0/0",
         bytes.len()
+    ))
+}
+
+/// Checks the macOS artifact: the zipped bundle holds an `Info.plist` naming
+/// the executable and the comic associations, and that executable kept a mode
+/// that can run.
+fn check_macos_zip(path: &Path) -> Result<String, String> {
+    let name = file_name(path);
+    let file = fs::File::open(path).map_err(|error| format!("{name}: {error}"))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|error| format!("{name}: not a zip archive: {error}"))?;
+
+    let mut plist = None;
+    let mut mode = None;
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|error| format!("{name}: {error}"))?;
+        let member = entry
+            .name()
+            .map_err(|error| format!("{name}: {error}"))?
+            .into_owned();
+        // A release asset is unpacked by users, so a member that escapes the
+        // bundle directory is a reason to stop, not to tidy up.
+        if member.starts_with('/') || member.split('/').any(|part| part == "..") {
+            return Err(format!("{name}: unsafe member {member:?}"));
+        }
+        if member == MACOS_PLIST {
+            let mut text = String::new();
+            entry
+                .read_to_string(&mut text)
+                .map_err(|error| format!("{name}: {member}: {error}"))?;
+            plist = Some(text);
+        } else if member == MACOS_EXECUTABLE {
+            mode = Some(entry.unix_mode().unwrap_or(0));
+        }
+    }
+
+    let plist = plist.ok_or_else(|| format!("{name}: no {MACOS_PLIST}"))?;
+    let mode = mode.ok_or_else(|| format!("{name}: no {MACOS_EXECUTABLE}"))?;
+    if mode & 0o111 == 0 {
+        return Err(format!(
+            "{name}: {MACOS_EXECUTABLE} mode is {mode:o}, so the app cannot launch"
+        ));
+    }
+    if !plist.contains("<string>comical</string>") {
+        return Err(format!(
+            "{name}: Info.plist does not name comical as CFBundleExecutable"
+        ));
+    }
+    for value in [
+        "CFBundleIdentifier",
+        "CFBundleName",
+        "CFBundleShortVersionString",
+    ] {
+        if !plist.contains(value) {
+            return Err(format!("{name}: Info.plist omits {value}"));
+        }
+    }
+    for extension in ["cbz", "cbr", "cb7"] {
+        if !plist.contains(extension) {
+            return Err(format!(
+                "{name}: Info.plist omits the {extension} association"
+            ));
+        }
+    }
+
+    Ok(format!(
+        "{name}: Comical.app, mode {mode:o}, document types and version present"
     ))
 }
 
@@ -625,6 +700,69 @@ mod tests {
         fs::write(&loose, b"different").expect("rewrite loose");
         let error = check_tarball(&path, "comical", Some(&loose)).expect_err("mismatch");
         assert!(error.contains("differs"), "{error}");
+    }
+
+    /// A zipped bundle holding the two entries the macOS check reads.
+    fn write_macos_zip(directory: &Path, mode: u32, plist: &str) -> PathBuf {
+        use std::io::Write;
+
+        use zip::ZipWriter;
+        use zip::write::SimpleFileOptions;
+
+        let path = directory.join("comical-1.2.3-macos-universal.zip");
+        let file = fs::File::create(&path).expect("create zip");
+        let mut writer = ZipWriter::new(file);
+        writer
+            .start_file(MACOS_PLIST, SimpleFileOptions::default())
+            .expect("plist entry");
+        writer.write_all(plist.as_bytes()).expect("write plist");
+        writer
+            .start_file(
+                MACOS_EXECUTABLE,
+                SimpleFileOptions::default().unix_permissions(mode),
+            )
+            .expect("executable entry");
+        writer.write_all(b"binary").expect("write executable");
+        writer.finish().expect("finish zip");
+        path
+    }
+
+    /// The keys `cargo bundle` writes plus the associations added by the plist
+    /// extension in `crates/comical-app/assets`.
+    const BUNDLE_PLIST: &str = "<key>CFBundleIdentifier</key>\
+<string>io.github.lordra9-svg.comical</string>\
+<key>CFBundleName</key><string>Comical</string>\
+<key>CFBundleExecutable</key><string>comical</string>\
+<key>CFBundleShortVersionString</key><string>1.2.3</string>\
+<key>CFBundleTypeExtensions</key>\
+<array><string>cbz</string><string>cbr</string><string>cb7</string></array>";
+
+    #[test]
+    fn macos_check_accepts_the_zipped_bundle() {
+        let directory = tempfile::tempdir().expect("dir");
+        let path = write_macos_zip(directory.path(), 0o755, BUNDLE_PLIST);
+
+        let summary = check_macos_zip(&path).expect("bundle");
+        assert!(summary.contains("Comical.app"), "{summary}");
+    }
+
+    #[test]
+    fn macos_check_rejects_an_unlaunchable_executable() {
+        let directory = tempfile::tempdir().expect("dir");
+        let path = write_macos_zip(directory.path(), 0o644, BUNDLE_PLIST);
+
+        let error = check_macos_zip(&path).expect_err("mode");
+        assert!(error.contains("cannot launch"), "{error}");
+    }
+
+    #[test]
+    fn macos_check_requires_the_document_types() {
+        let directory = tempfile::tempdir().expect("dir");
+        let plist = BUNDLE_PLIST.replace("<string>cb7</string>", "");
+        let path = write_macos_zip(directory.path(), 0o755, &plist);
+
+        let error = check_macos_zip(&path).expect_err("missing association");
+        assert!(error.contains("cb7"), "{error}");
     }
 
     /// A minimal PE image: x86-64, Windows GUI, a `.rsrc` section and one

@@ -1,0 +1,49 @@
+	<!--
+	  Merged into the generated Info.plist by `cargo bundle`, which appends this
+	  file's contents just before it closes the top-level dictionary. Keep it to
+	  key/value pairs: it is a fragment, not a plist document.
+
+	  These are the same three associations the Windows installer registers, so
+	  double-clicking a comic opens Comical on either platform.
+	-->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Comic Book ZIP Archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>cbz</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Comic Book RAR Archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>cbr</string>
+				<string>rar</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Comic Book 7z Archive</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>cb7</string>
+				<string>7z</string>
+			</array>
+		</dict>
+	</array>

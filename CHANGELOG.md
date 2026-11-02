@@ -5,6 +5,20 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- `comical-app` carries `[package.metadata.bundle]` for macOS: name, bundle
+  identifier, category, minimum system version 10.15, the placeholder icon, and
+  an `Info.plist` fragment that declares the `.cbz`, `.cbr` and `.cb7` document
+  types the Windows installer already registers. `xtask release` builds a
+  universal `.app` when both macOS targets are installed and zips it, because a
+  bundle is a directory and a release asset has to be a file.
+- `.github/workflows/release.yml` builds the artifacts a Linux host cannot:
+  the Windows executable and MSI on Ubuntu (mingw-w64 plus wixl), and the
+  universal macOS app on a macOS runner. Both are verified with `xtask verify`
+  before upload, and the release's `SHA256SUMS.txt` is rewritten from the
+  assets that end up published. `xtask verify` reads the zipped bundle and
+  checks its executable bit, version and document types.
+
 ## [0.2.4] — 2026-11-02
 
 ### Changed

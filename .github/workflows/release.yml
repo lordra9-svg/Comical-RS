@@ -1,0 +1,149 @@
+name: Release
+
+# Builds the artifacts a Linux host cannot produce and attaches them to an
+# existing GitHub release. Linux is not repeated here: `cargo run -p xtask --
+# release <version>` builds and `verify` checks those on any Linux machine.
+#
+# Windows: cross-compiled on Ubuntu, because mingw-w64 gives the link step and
+# wixl builds the MSI from the same WiX source the project ships.
+# macOS: built on a macOS runner, because the toolchain is not redistributable.
+# Both targets are installed there, so cargo-bundle lipos one universal app.
+#
+# The published SHA256SUMS.txt is rewritten at the end from the assets that are
+# actually on the release, so it covers the Linux files uploaded by hand too.
+#
+# `ref` exists for one case: a tag cut before this workflow and before the
+# macOS bundle metadata existed (v0.2.4). Building `master` for it produces the
+# same binary, because that commit only adds packaging configuration, and the
+# macOS app needs the metadata to exist at all. Leave it empty for new tags.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to attach the artifacts to, for example v0.2.4"
+        required: true
+        type: string
+      ref:
+        description: "Commit or tag to build; leave empty to build the tag itself."
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  windows:
+    name: Windows exe and MSI
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || inputs.tag }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install the packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends wixl wixl-data gcc-mingw-w64-x86-64
+
+      - name: Build and verify the artifacts
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          version=${TAG#v}
+          cargo run -p xtask -- release "$version"
+          test -s "target/release-dist/$version/comical-windows-x86_64.exe"
+          test -s "target/release-dist/$version/comical-$version-x86_64.msi"
+          cargo run -p xtask -- verify "target/release-dist/$version"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Attach them to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          dist="target/release-dist/$VERSION"
+          gh release upload "$TAG" \
+            "$dist/comical-windows-x86_64.exe" \
+            "$dist/comical-$VERSION-x86_64.msi" \
+            --clobber
+
+  macos:
+    name: macOS app
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || inputs.tag }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-bundle
+        run: cargo install cargo-bundle --locked
+
+      - name: Build and verify the artifacts
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          version=${TAG#v}
+          cargo run -p xtask -- release "$version"
+          test -s "target/release-dist/$version/comical-$version-macos-universal.zip"
+          cargo run -p xtask -- verify "target/release-dist/$version"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" \
+            "target/release-dist/$VERSION/comical-$VERSION-macos-universal.zip" \
+            --clobber
+
+  checksums:
+    name: Rebuild SHA256SUMS.txt
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Cover every published asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir assets && cd assets
+          gh release download "$TAG" --clobber
+          rm -f SHA256SUMS.txt
+          for file in *; do
+            printf '%s  ./%s\n' "$(sha256sum "$file" | cut -d' ' -f1)" "$file"
+          done | sort -k2 > ../SHA256SUMS.txt
+          gh release upload "$TAG" ../SHA256SUMS.txt --clobber
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name) \(.size) bytes"'

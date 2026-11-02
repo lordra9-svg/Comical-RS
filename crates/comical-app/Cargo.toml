@@ -52,6 +52,26 @@ assets = [
     ["../../README.md", "usr/share/doc/comical/", "644"],
 ]
 
+# `cargo bundle` reads this for the macOS `.app`. The icon is the same
+# placeholder as the Windows one, so it is capped at 256 px. The document types
+# in the plist extension mirror the WiX file associations, since a bundle has no
+# installer to register extensions for it.
+[package.metadata.bundle]
+name = "Comical"
+identifier = "io.github.lordra9-svg.comical"
+icon = ["assets/comical.ico"]
+category = "public.app-category.entertainment"
+short_description = "Desktop comic book reader"
+long_description = """\
+Comical reads CBZ, CBR and 7z comic archives with one-page, two-page and
+webtoon view modes, EXIF orientation, per-page rotation and RTL reading."""
+copyright = "2024-2026 Comical-RS Contributors"
+
+[package.metadata.bundle.osx]
+# 10.15 is the oldest release eframe and wgpu still support.
+minimum_system_version = "10.15"
+info_plist_exts = ["assets/macos-document-types.plist"]
+
 # eframe's wgpu integration turns wgpu's default features off, which also drops
 # wgpu's `dx12` backend, so Windows would be left with Vulkan and GLES only.
 # Named here purely to enable that backend; the app never calls wgpu directly.

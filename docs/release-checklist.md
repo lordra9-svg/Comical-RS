@@ -11,6 +11,8 @@ this checklist covers everything that cannot be automated.
 - [ ] The `Release packaging` CI job is green: it builds the artifacts on a
   clean Ubuntu runner with `wixl` and mingw-w64, requires the MSI and runs the
   same `verify` command
+- [ ] The `Release` workflow has run for the tag and attached the Windows and
+  macOS artifacts (see below)
 - [ ] All milestones M0–M12 pass on Windows, macOS and Linux
 - [ ] `cargo fmt --all -- --check` passes
 - [ ] `cargo clippy --all-targets -- -D warnings` passes with zero warnings
@@ -41,6 +43,25 @@ this checklist covers everything that cannot be automated.
   - Staple: `xcrun stapler staple Comical.app`
 - [ ] **Linux**: GPG-sign `.deb` package if distributing via apt repository
   - `dpkg-sig --sign builder comical_*.deb`
+
+## Platform artifacts
+
+Linux is built wherever a Linux machine runs
+`cargo run -p xtask -- release <version>`. The other two platforms come from
+the `Release` workflow (`gh workflow run release.yml -f tag=v<version>`), which
+attaches its output to the existing release:
+
+- **Windows**: `comical-windows-x86_64.exe` and
+  `comical-<version>-x86_64.msi`, cross-compiled on Ubuntu with mingw-w64, the
+  MSI built by `wixl` from `crates/comical-app/wix/main.wxs`.
+- **macOS**: `comical-<version>-macos-universal.zip`, holding `Comical.app` for
+  both Apple silicon and Intel, built by `cargo bundle` on a macOS runner. The
+  document types come from
+  `crates/comical-app/assets/macos-document-types.plist`.
+
+Both jobs run `xtask verify` on what they built before uploading, and a final
+job rewrites `SHA256SUMS.txt` from the assets that are actually on the release.
+The artifacts are unsigned: the signing steps below are still manual.
 
 ## File association verification
 
