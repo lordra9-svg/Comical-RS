@@ -523,12 +523,17 @@ fn zip_directory(
     entries.sort();
 
     for path in entries {
-        let name = prefix.join(path.file_name().unwrap_or_default());
-        let name = name.to_string_lossy().into_owned();
+        // `/` is the separator the archive format defines. `Path::join` writes
+        // `\` on Windows, and an entry named that way does not unpack as a
+        // bundle, so the member name is built by hand.
+        let name = format!(
+            "{}/{}",
+            prefix.to_string_lossy(),
+            path.file_name().unwrap_or_default().to_string_lossy()
+        );
         if path.is_dir() {
-            let child = name.clone();
-            writer.add_directory(name, ZipFileOptions::default())?;
-            zip_directory(writer, &path, Path::new(&child))?;
+            writer.add_directory(name.clone(), ZipFileOptions::default())?;
+            zip_directory(writer, &path, Path::new(&name))?;
         } else {
             let permissions = if is_executable(&path) { 0o755 } else { 0o644 };
             let options = ZipFileOptions::default()
@@ -942,11 +947,13 @@ mod tests {
         let entry = zip
             .by_name(&format!("Comical.app/Contents/MacOS/{BINARY}"))
             .expect("executable entry");
-        // The mode comes from `is_executable`, which only exists on unix, so a
-        // Windows build of this test records a plain file. Both arms keep the
-        // binding read on every platform, which `-D warnings` requires.
-        let expected = if cfg!(unix) { 0o755 } else { 0o644 };
-        assert_eq!(entry.unix_mode().map(|mode| mode & 0o777), Some(expected));
+        // The mode comes from `is_executable`, which only exists on unix, and
+        // the zip crate records the executable bit only on unix as well, so
+        // that half of the assertion is checked where it can hold.
+        let mode = entry.unix_mode();
+        assert!(mode.is_some(), "the archive records no mode for the binary");
+        #[cfg(unix)]
+        assert_eq!(mode.map(|mode| mode & 0o777), Some(0o755));
     }
 
     #[test]

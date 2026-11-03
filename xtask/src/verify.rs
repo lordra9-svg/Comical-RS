@@ -744,6 +744,11 @@ mod tests {
 <key>CFBundleTypeExtensions</key>\
 <array><string>cbz</string><string>cbr</string><string>cb7</string></array>";
 
+    /// The fixture below needs an executable bit, which the zip crate records
+    /// only when it runs on unix; on Windows every entry comes back as 0664 and
+    /// the check is right to reject that. The rejection itself is covered by
+    /// `macos_check_rejects_an_unlaunchable_executable` everywhere.
+    #[cfg(unix)]
     #[test]
     fn macos_check_accepts_the_zipped_bundle() {
         let directory = tempfile::tempdir().expect("dir");
@@ -762,6 +767,7 @@ mod tests {
         assert!(error.contains("cannot launch"), "{error}");
     }
 
+    #[cfg(unix)]
     #[test]
     fn macos_check_requires_the_document_types() {
         let directory = tempfile::tempdir().expect("dir");
