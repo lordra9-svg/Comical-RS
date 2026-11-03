@@ -36,11 +36,12 @@ this checklist covers everything that cannot be automated.
   - Obtain certificate from a trusted CA (DigiCert, Sectigo, etc.)
   - Sign with `signtool sign /f cert.pfx /p PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 comical.exe`
   - Verify signature: `signtool verify /pa comical.exe`
-- [ ] **macOS**: Sign `.app` bundle and notarize with Apple
-  - `codesign --force --deep --sign "Developer ID Application: ..." Comical.app`
-  - Create DMG: `hdiutil create -volname Comical -srcfolder Comical.app -ov Comical.dmg`
-  - Notarize: `xcrun notarytool submit Comical.dmg --apple-id ... --team-id ... --password ...`
-  - Staple: `xcrun stapler staple Comical.app`
+- **macOS**: signing and notarization are automated (see below). The manual
+  equivalents, if a build has to be fixed up by hand:
+  - `codesign --force --deep --options runtime --timestamp --sign "Developer ID Application: ..." Comical.app`
+  - `ditto -c -k --keepParent Comical.app Comical.zip`
+  - `xcrun notarytool submit Comical.zip --apple-id ... --team-id ... --password ... --wait`
+  - `xcrun stapler staple Comical.app && xcrun stapler validate Comical.app`
 - [ ] **Linux**: GPG-sign `.deb` package if distributing via apt repository
   - `dpkg-sig --sign builder comical_*.deb`
 
@@ -61,7 +62,28 @@ attaches its output to the existing release:
 
 Both jobs run `xtask verify` on what they built before uploading, and a final
 job rewrites `SHA256SUMS.txt` from the assets that are actually on the release.
-The artifacts are unsigned: the signing steps below are still manual.
+
+### macOS signing and notarization
+
+`xtask release` signs and notarizes the `.app` when the environment carries an
+identity and notary credentials, and builds an unsigned app (saying so) when it
+does not. The `Release` workflow imports the certificate and exports the rest
+from repository secrets:
+
+| Secret | Contents |
+|---|---|
+| `MACOS_CERT_P12` | base64 of the Developer ID Application `.p12` |
+| `MACOS_CERT_PASSWORD` | password of that `.p12` |
+| `APPLE_ID` | Apple ID that owns the team |
+| `APPLE_TEAM_ID` | ten-character team identifier |
+| `APPLE_APP_PASSWORD` | app-specific password for that Apple ID |
+
+Signing uses the hardened runtime with a secure timestamp, the zip is submitted
+to `notarytool --wait`, and the ticket is stapled into the bundle before the
+published zip is written. An identity without the three notary values fails the
+job instead of publishing an app Gatekeeper will reject; `xtask verify` reports
+whether the zipped bundle carries a signature. Windows binaries remain
+unsigned, since that needs a purchased certificate.
 
 ## File association verification
 

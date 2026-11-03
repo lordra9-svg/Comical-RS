@@ -32,6 +32,9 @@ const REQUIRED_IMPORTS: [&str; 3] = ["KERNEL32.dll", "USER32.dll", "d3dcompiler_
 /// The two paths inside the zipped macOS bundle that packaging depends on.
 const MACOS_PLIST: &str = "Comical.app/Contents/Info.plist";
 const MACOS_EXECUTABLE: &str = "Comical.app/Contents/MacOS/comical";
+/// Present only when the bundle was signed; reported, not required, because a
+/// local run on a machine without a Developer ID certificate is legitimate.
+const MACOS_SIGNATURE: &str = "Comical.app/Contents/_CodeSignature/CodeResources";
 /// Installer strings that prove the associations and the shortcut survived.
 /// The registry component is the one a careless edit to the WiX source drops.
 const REQUIRED_MSI_STRINGS: [&str; 10] = [
@@ -259,6 +262,7 @@ fn check_macos_zip(path: &Path) -> Result<String, String> {
 
     let mut plist = None;
     let mut mode = None;
+    let mut signed = false;
     for index in 0..archive.len() {
         let mut entry = archive
             .by_index(index)
@@ -280,6 +284,8 @@ fn check_macos_zip(path: &Path) -> Result<String, String> {
             plist = Some(text);
         } else if member == MACOS_EXECUTABLE {
             mode = Some(entry.unix_mode().unwrap_or(0));
+        } else if member == MACOS_SIGNATURE {
+            signed = true;
         }
     }
 
@@ -313,7 +319,8 @@ fn check_macos_zip(path: &Path) -> Result<String, String> {
     }
 
     Ok(format!(
-        "{name}: Comical.app, mode {mode:o}, document types and version present"
+        "{name}: Comical.app, mode {mode:o}, document types and version present, {}",
+        if signed { "signed" } else { "unsigned" }
     ))
 }
 

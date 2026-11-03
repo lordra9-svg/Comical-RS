@@ -8,6 +8,9 @@ name: Release
 # wixl builds the MSI from the same WiX source the project ships.
 # macOS: built on a macOS runner, because the toolchain is not redistributable.
 # Both targets are installed there, so cargo-bundle lipos one universal app.
+# With a Developer ID certificate and notary credentials in the repository
+# secrets, `xtask release` also signs, notarizes and staples that app; without
+# them it builds an unsigned one and says so.
 #
 # The published SHA256SUMS.txt is rewritten at the end from the assets that are
 # actually on the release, so it covers the Linux files uploaded by hand too.
@@ -98,7 +101,8 @@ jobs:
     # cancellation fifteen minutes later. Both current images can build the
     # universal bundle, and the input is a way out when one pool is empty.
     runs-on: ${{ inputs.macos_runner || 'macos-15' }}
-    timeout-minutes: 45
+    # Notarization waits on Apple, which adds minutes to an already long job.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v7
@@ -111,12 +115,52 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # Pinned, because a release should not discover a new bundle layout, and
+      # cached, because this install is nine minutes of every macOS run.
+      - name: Cache cargo-bundle
+        id: cargo-bundle
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-bundle
+          key: cargo-bundle-0.12.0-${{ runner.os }}
+
       - name: Install cargo-bundle
-        run: cargo install cargo-bundle --locked
+        if: steps.cargo-bundle.outputs.cache-hit != 'true'
+        run: cargo install cargo-bundle --locked --version 0.12.0
+
+      # Codesign reads the identity from a keychain, so the .p12 is imported
+      # into a throwaway one. Steps that follow only see the identity name.
+      - name: Import the signing certificate
+        if: ${{ secrets.MACOS_CERT_P12 != '' }}
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "" "$keychain"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" \
+            -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -k "" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" \
+            $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          identity=$(security find-identity -v -p codesigning "$keychain" \
+            | sed -n 's/.*"\(.*\)"/\1/p' | head -1)
+          test -n "$identity"
+          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "Signing as $identity"
 
       - name: Build and verify the artifacts
         env:
           TAG: ${{ inputs.tag }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           set -euo pipefail
           version=${TAG#v}

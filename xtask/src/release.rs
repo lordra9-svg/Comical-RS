@@ -29,6 +29,13 @@ const MACOS_TARGETS: [&str; 2] = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
 /// Fragment holding the associations Finder reads for a double-clicked
 /// `.cbz`, `.cbr` or `.cb7`.
 const DOCUMENT_TYPES: &str = "crates/comical-app/assets/macos-document-types.plist";
+/// Set once the Developer ID certificate is in the keychain. Unset means an
+/// unsigned build, which is reported and still packaged.
+const SIGNING_IDENTITY: &str = "APPLE_SIGNING_IDENTITY";
+/// Notary credentials, required as soon as an identity is configured.
+const APPLE_ID: &str = "APPLE_ID";
+const APPLE_TEAM_ID: &str = "APPLE_TEAM_ID";
+const APPLE_APP_PASSWORD: &str = "APPLE_APP_PASSWORD";
 
 /// Builds every artifact this host supports into `target/release-dist`.
 pub fn run(version: Option<String>) -> Result<(), Box<dyn Error>> {
@@ -280,6 +287,12 @@ fn macos(root: &Path, dist: &Path, version: &str) -> Result<(), Box<dyn Error>> 
 
     let app = bundle_app_path(root, universal);
     add_document_types(root, &app)?;
+    // Signed or unsigned, never half: an identity without notary credentials
+    // fails here rather than publishing an app Gatekeeper rejects anyway.
+    let signing = Signing::from_env()?;
+    if let Some(signing) = &signing {
+        sign_app(&app, &signing.identity)?;
+    }
     copy_directory(&app, &dist.join("Comical.app"))?;
 
     // A bundle is a directory and a release asset has to be a file, so the
@@ -295,7 +308,149 @@ fn macos(root: &Path, dist: &Path, version: &str) -> Result<(), Box<dyn Error>> 
         archive.file_name().unwrap_or_default().to_string_lossy()
     );
     write_app_zip(&app, &archive)?;
+
+    if let Some(notary) = signing.as_ref().map(|signing| &signing.notary) {
+        notarize(&app, &archive, notary)?;
+        // Stapling writes the ticket into the bundle, so the archive that ships
+        // is rebuilt from the stapled copy rather than from the one submitted.
+        write_app_zip(&app, &archive)?;
+    } else {
+        println!("[macos-sign] SKIP: {SIGNING_IDENTITY} is not set, the bundle is unsigned");
+    }
     Ok(())
+}
+
+/// The Developer ID identity and the notary credentials, read from the
+/// environment.
+struct Signing {
+    identity: String,
+    notary: Notary,
+}
+
+struct Notary {
+    apple_id: String,
+    team_id: String,
+    password: String,
+}
+
+impl Signing {
+    fn from_env() -> Result<Option<Signing>, Box<dyn Error>> {
+        Signing::resolve(
+            non_empty(SIGNING_IDENTITY),
+            non_empty(APPLE_ID),
+            non_empty(APPLE_TEAM_ID),
+            non_empty(APPLE_APP_PASSWORD),
+        )
+        .map_err(|message| message.into())
+    }
+
+    /// Decides whether this run signs, from the values it would otherwise read
+    /// out of the environment. Kept pure so it can be tested without mutating
+    /// the environment of the test process.
+    fn resolve(
+        identity: Option<String>,
+        apple_id: Option<String>,
+        team_id: Option<String>,
+        password: Option<String>,
+    ) -> Result<Option<Signing>, String> {
+        let Some(identity) = identity else {
+            return Ok(None);
+        };
+        let (Some(apple_id), Some(team_id), Some(password)) = (apple_id, team_id, password) else {
+            return Err(format!(
+                "macos-notarize: {SIGNING_IDENTITY} is set, so {APPLE_ID}, {APPLE_TEAM_ID} and {APPLE_APP_PASSWORD} are required; \
+                 a signed build is not published un-notarized"
+            ));
+        };
+        Ok(Some(Signing {
+            identity,
+            notary: Notary {
+                apple_id,
+                team_id,
+                password,
+            },
+        }))
+    }
+}
+
+/// Reads an environment variable, treating blanks as unset.
+fn non_empty(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+/// Signs the bundle with the hardened runtime and a secure timestamp, which is
+/// what notarization requires.
+fn sign_app(app: &Path, identity: &str) -> Result<(), Box<dyn Error>> {
+    let path = app.to_string_lossy().into_owned();
+    println!("[macos-sign] {identity}");
+    tool::run(
+        "codesign",
+        &[
+            "--force",
+            "--deep",
+            "--options",
+            "runtime",
+            "--timestamp",
+            "--sign",
+            identity,
+            &path,
+        ],
+        None,
+    )?;
+    tool::run(
+        "codesign",
+        &["--verify", "--deep", "--strict", "--verbose=2", &path],
+        None,
+    )
+}
+
+/// Submits the archive, waits for Apple's verdict and staples the ticket into
+/// the bundle.
+///
+/// `notarytool` exits non-zero for an `Invalid` verdict, so a rejection fails
+/// the build instead of publishing an app that will not launch elsewhere.
+fn notarize(app: &Path, archive: &Path, notary: &Notary) -> Result<(), Box<dyn Error>> {
+    println!(
+        "[macos-notarize] submitting {}",
+        archive.file_name().unwrap_or_default().to_string_lossy()
+    );
+    let args = notary_args(&archive.to_string_lossy(), notary);
+    let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
+    // Silent: the argument list carries the app-specific password.
+    tool::run_silent("xcrun", &borrowed, None)?;
+
+    let path = app.to_string_lossy().into_owned();
+    println!("[macos-notarize] stapling");
+    tool::run("xcrun", &["stapler", "staple", &path], None)?;
+    tool::run("xcrun", &["stapler", "validate", &path], None)?;
+    // What Gatekeeper does to a downloaded copy.
+    tool::run(
+        "spctl",
+        &["--assess", "--type", "exec", "--verbose=2", &path],
+        None,
+    )
+}
+
+/// Command line for `xcrun notarytool submit`.
+fn notary_args(archive: &str, notary: &Notary) -> Vec<String> {
+    [
+        "notarytool",
+        "submit",
+        archive,
+        "--apple-id",
+        &notary.apple_id,
+        "--team-id",
+        &notary.team_id,
+        "--password",
+        &notary.password,
+        "--wait",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
 }
 
 /// Where cargo-bundle writes `Comical.app`.
@@ -688,6 +843,63 @@ mod tests {
     }
 
     #[test]
+    fn notary_arguments_carry_the_credentials_and_wait() {
+        let notary = Notary {
+            apple_id: "reader@example.com".to_owned(),
+            team_id: "TEAM123456".to_owned(),
+            password: "abcd-efgh-ijkl-mnop".to_owned(),
+        };
+        let archive = "/dist/comical-0.2.5-macos-universal.zip";
+        let args = notary_args(archive, &notary);
+
+        assert_eq!(args.first().map(String::as_str), Some("notarytool"));
+        assert_eq!(args.get(1).map(String::as_str), Some("submit"));
+        assert_eq!(args.get(2).map(String::as_str), Some(archive));
+        assert_eq!(args.last().map(String::as_str), Some("--wait"));
+        let value = |flag: &str| {
+            let index = args.iter().position(|arg| arg == flag).expect(flag);
+            args.get(index + 1).map(String::as_str)
+        };
+        assert_eq!(value("--apple-id"), Some("reader@example.com"));
+        assert_eq!(value("--team-id"), Some("TEAM123456"));
+        assert_eq!(value("--password"), Some("abcd-efgh-ijkl-mnop"));
+    }
+
+    /// An identity without the notary credentials has to stop the run: a
+    /// signed but un-notarized app fails Gatekeeper wherever it is downloaded.
+    #[test]
+    fn an_identity_without_notary_credentials_is_rejected() {
+        let identity = || Some("Developer ID Application: Comical (TEAM123456)".to_owned());
+        assert!(
+            Signing::resolve(None, None, None, None)
+                .expect("unset")
+                .is_none()
+        );
+
+        // `.err()` rather than `.expect_err()`: `Signing` holds the password and
+        // deliberately has no `Debug`, which `expect_err` would require.
+        let error = Signing::resolve(identity(), None, Some("T".to_owned()), Some("p".to_owned()))
+            .err()
+            .expect("partial credentials");
+        assert!(error.contains("APPLE_ID"), "{error}");
+
+        let signing = Signing::resolve(
+            identity(),
+            Some("reader@example.com".to_owned()),
+            Some("TEAM123456".to_owned()),
+            Some("abcd-efgh-ijkl-mnop".to_owned()),
+        )
+        .expect("complete credentials")
+        .expect("signing");
+        assert!(
+            signing.identity.contains("Developer ID Application"),
+            "{}",
+            signing.identity
+        );
+        assert_eq!(signing.notary.team_id, "TEAM123456");
+    }
+
+    #[test]
     fn a_plist_without_a_dictionary_is_reported() {
         assert!(insert_into_plist("<plist/>", "<key>x</key>").is_none());
     }
@@ -730,8 +942,11 @@ mod tests {
         let entry = zip
             .by_name(&format!("Comical.app/Contents/MacOS/{BINARY}"))
             .expect("executable entry");
-        #[cfg(unix)]
-        assert_eq!(entry.unix_mode().map(|mode| mode & 0o777), Some(0o755));
+        // The mode comes from `is_executable`, which only exists on unix, so a
+        // Windows build of this test records a plain file. Both arms keep the
+        // binding read on every platform, which `-D warnings` requires.
+        let expected = if cfg!(unix) { 0o755 } else { 0o644 };
+        assert_eq!(entry.unix_mode().map(|mode| mode & 0o777), Some(expected));
     }
 
     #[test]

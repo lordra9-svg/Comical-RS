@@ -43,6 +43,28 @@ pub fn run_named(
     }
 }
 
+/// Runs `program` without echoing the argument list.
+///
+/// Only for a command whose arguments carry a credential: the other helpers log
+/// their command line, and a notary password must not reach a job log.
+pub fn run_silent(
+    program: &str,
+    args: &[&str],
+    directory: Option<&Path>,
+) -> Result<(), Box<dyn Error>> {
+    let mut command = Command::new(program);
+    command.args(args);
+    if let Some(directory) = directory {
+        command.current_dir(directory);
+    }
+    let status = command.status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("{program} failed ({status})").into())
+    }
+}
+
 /// Runs `cargo` with `args`, preferring the cargo that started this task.
 pub fn cargo(args: &[&str]) -> Result<(), Box<dyn Error>> {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
