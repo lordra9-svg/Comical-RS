@@ -5,7 +5,17 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.5] — 2026-11-03
+
 ### Added
+- The macOS app is signed and notarized when the environment carries a
+  Developer ID identity and the three notary credentials: `xtask release` signs
+  the bundle with the hardened runtime and a secure timestamp, submits the zip
+  to `notarytool --wait`, staples the ticket and rebuilds the published archive
+  from the stapled app. A configured identity without notary credentials fails
+  the run instead of publishing an app Gatekeeper rejects, and `xtask verify`
+  reports whether the zipped bundle is signed. The `Release` workflow imports
+  the certificate into a throwaway keychain from repository secrets.
 - `comical-app` carries `[package.metadata.bundle]` for macOS: name, bundle
   identifier, category, minimum system version 10.15, the placeholder icon, and
   an `Info.plist` fragment that declares the `.cbz`, `.cbr` and `.cb7` document
@@ -18,6 +28,19 @@ All notable changes to Comical-RS are documented here. Format follows
   before upload, and the release's `SHA256SUMS.txt` is rewritten from the
   assets that end up published. `xtask verify` reads the zipped bundle and
   checks its executable bit, version and document types.
+
+### Changed
+- `cargo-bundle` is pinned to 0.12.0 and cached by the `Release` workflow: the
+  install was nine to ten minutes of every macOS run, longer than either build.
+
+### Fixed
+- Windows CI runs the gate again. A test binding that is only read under
+  `#[cfg(unix)]` tripped `-D warnings`' unused-variable lint on
+  `windows-latest`, so the Windows job failed while Linux and macOS passed.
+- The published macOS app has its icon. `cargo-bundle` globs both `icon` and
+  `info_plist_exts` from the directory it runs in, which is the workspace root,
+  so paths written relative to the crate matched nothing and were skipped
+  silently.
 
 ## [0.2.4] — 2026-11-02
 
