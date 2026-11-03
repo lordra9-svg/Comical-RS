@@ -103,6 +103,14 @@ jobs:
     runs-on: ${{ inputs.macos_runner || 'macos-15' }}
     # Notarization waits on Apple, which adds minutes to an already long job.
     timeout-minutes: 60
+    env:
+      # Declared here so a step can branch on them: `secrets` is rejected in a
+      # step-level `if`, and a missing certificate has to mean "build unsigned".
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v7
@@ -131,10 +139,7 @@ jobs:
       # Codesign reads the identity from a keychain, so the .p12 is imported
       # into a throwaway one. Steps that follow only see the identity name.
       - name: Import the signing certificate
-        if: ${{ secrets.MACOS_CERT_P12 != '' }}
-        env:
-          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        if: env.MACOS_CERT_P12 != ''
         run: |
           set -euo pipefail
           keychain="$RUNNER_TEMP/signing.keychain-db"
@@ -158,9 +163,6 @@ jobs:
       - name: Build and verify the artifacts
         env:
           TAG: ${{ inputs.tag }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           set -euo pipefail
           version=${TAG#v}
