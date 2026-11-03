@@ -59,7 +59,10 @@ assets = [
 [package.metadata.bundle]
 name = "Comical"
 identifier = "io.github.lordra9-svg.comical"
-icon = ["assets/comical.ico"]
+# cargo-bundle globs these from the directory it runs in, which is the
+# workspace root, not this crate; a path relative to the package silently
+# matches nothing and the bundle ships without an icon.
+icon = ["crates/comical-app/assets/comical.ico"]
 category = "public.app-category.entertainment"
 short_description = "Desktop comic book reader"
 long_description = """\
@@ -70,7 +73,9 @@ copyright = "2024-2026 Comical-RS Contributors"
 [package.metadata.bundle.osx]
 # 10.15 is the oldest release eframe and wgpu still support.
 minimum_system_version = "10.15"
-info_plist_exts = ["assets/macos-document-types.plist"]
+# The document types are merged by `xtask release`, which reads the fragment
+# from the workspace and can test the result; `info_plist_exts` would resolve
+# against this crate's directory and is not used.
 
 # eframe's wgpu integration turns wgpu's default features off, which also drops
 # wgpu's `dx12` backend, so Windows would be left with Vulkan and GLES only.
