@@ -275,7 +275,7 @@ fn macos(root: &Path, dist: &Path, version: &str) -> Result<(), Box<dyn Error>> 
     );
     tool::cargo(&args)?;
 
-    let app = root.join("target/release/bundle/osx/Comical.app");
+    let app = bundle_app_path(root, universal);
     copy_directory(&app, &dist.join("Comical.app"))?;
 
     // A bundle is a directory and a release asset has to be a file, so the
@@ -292,6 +292,18 @@ fn macos(root: &Path, dist: &Path, version: &str) -> Result<(), Box<dyn Error>> 
     );
     write_app_zip(&app, &archive)?;
     Ok(())
+}
+
+/// Where cargo-bundle writes `Comical.app`.
+///
+/// Two `--target` flags make cargo-bundle build both slices and combine them
+/// under `target/universal`; a single target stays under `target/release`.
+fn bundle_app_path(root: &Path, universal: bool) -> PathBuf {
+    if universal {
+        root.join("target/universal/release/bundle/osx/Comical.app")
+    } else {
+        root.join("target/release/bundle/osx/Comical.app")
+    }
 }
 
 /// Zips a `.app` bundle with its paths relative to the bundle directory.
@@ -605,6 +617,21 @@ mod tests {
         // tool now always supplies the variable, so no `<?define?>` is needed.
         assert!(!wxs.contains("<?define"), "{wxs}");
         assert!(!wxs.contains("<?ifndef"), "{wxs}");
+    }
+
+    /// A universal build lands under `target/universal`, so reading the app
+    /// from `target/release` fails only when both targets are installed.
+    #[test]
+    fn bundle_path_follows_the_universal_build() {
+        let root = Path::new("/w");
+        assert_eq!(
+            bundle_app_path(root, true),
+            Path::new("/w/target/universal/release/bundle/osx/Comical.app")
+        );
+        assert_eq!(
+            bundle_app_path(root, false),
+            Path::new("/w/target/release/bundle/osx/Comical.app")
+        );
     }
 
     #[test]
