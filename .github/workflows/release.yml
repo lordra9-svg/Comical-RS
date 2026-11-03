@@ -121,6 +121,8 @@ jobs:
           set -euo pipefail
           version=${TAG#v}
           cargo run -p xtask -- release "$version"
+          # Printed so a bundle that loses its document types says what it has.
+          plutil -p target/universal/release/bundle/osx/Comical.app/Contents/Info.plist || true
           test -s "target/release-dist/$version/comical-$version-macos-universal.zip"
           cargo run -p xtask -- verify "target/release-dist/$version"
           echo "VERSION=$version" >> "$GITHUB_ENV"

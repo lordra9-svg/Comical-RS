@@ -26,6 +26,9 @@ const WINDOWS_GNU: &str = "x86_64-pc-windows-gnu";
 const MINGW_CC: &str = "x86_64-w64-mingw32-gcc";
 /// macOS targets, combined into one universal bundle when both are installed.
 const MACOS_TARGETS: [&str; 2] = ["aarch64-apple-darwin", "x86_64-apple-darwin"];
+/// Fragment holding the associations Finder reads for a double-clicked
+/// `.cbz`, `.cbr` or `.cb7`.
+const DOCUMENT_TYPES: &str = "crates/comical-app/assets/macos-document-types.plist";
 
 /// Builds every artifact this host supports into `target/release-dist`.
 pub fn run(version: Option<String>) -> Result<(), Box<dyn Error>> {
@@ -276,6 +279,7 @@ fn macos(root: &Path, dist: &Path, version: &str) -> Result<(), Box<dyn Error>> 
     tool::cargo(&args)?;
 
     let app = bundle_app_path(root, universal);
+    add_document_types(root, &app)?;
     copy_directory(&app, &dist.join("Comical.app"))?;
 
     // A bundle is a directory and a release asset has to be a file, so the
@@ -304,6 +308,38 @@ fn bundle_app_path(root: &Path, universal: bool) -> PathBuf {
     } else {
         root.join("target/release/bundle/osx/Comical.app")
     }
+}
+
+/// Adds the comic associations to the bundle's `Info.plist`.
+///
+/// cargo-bundle is configured to append the fragment itself, but the bundle it
+/// built in CI carried no `CFBundleDocumentTypes` and only the release check
+/// noticed. Merging here is deterministic and unit tested, and the association
+/// is the difference between a reader and a reader that opens its own files.
+fn add_document_types(root: &Path, app: &Path) -> Result<(), Box<dyn Error>> {
+    let plist_path = app.join("Contents/Info.plist");
+    let plist = fs::read_to_string(&plist_path)
+        .map_err(|error| format!("macos: {}: {error}", plist_path.display()))?;
+    if plist.contains("CFBundleDocumentTypes") {
+        return Ok(());
+    }
+    let fragment = fs::read_to_string(root.join(DOCUMENT_TYPES))?;
+    let merged =
+        insert_into_plist(&plist, &fragment).ok_or("macos: Info.plist has no top-level </dict>")?;
+    fs::write(&plist_path, merged)?;
+    println!("[macos-plist] CFBundleDocumentTypes");
+    Ok(())
+}
+
+/// Puts `fragment` last inside the plist's top-level dictionary.
+fn insert_into_plist(plist: &str, fragment: &str) -> Option<String> {
+    let index = plist.rfind("</dict>")?;
+    let mut merged = String::with_capacity(plist.len() + fragment.len());
+    merged.push_str(&plist[..index]);
+    merged.push_str(fragment);
+    merged.push('\n');
+    merged.push_str(&plist[index..]);
+    Some(merged)
 }
 
 /// Zips a `.app` bundle with its paths relative to the bundle directory.
@@ -632,6 +668,28 @@ mod tests {
             bundle_app_path(root, false),
             Path::new("/w/target/release/bundle/osx/Comical.app")
         );
+    }
+
+    #[test]
+    fn document_types_land_inside_the_bundle_dictionary() {
+        let plist = "<?xml version=\"1.0\"?>\n<plist version=\"1.0\">\n<dict>\n \
+            <key>CFBundleName</key>\n <string>Comical</string>\n</dict>\n</plist>\n";
+        let merged = insert_into_plist(plist, "<key>CFBundleDocumentTypes</key>").expect("dict");
+
+        let key = merged.find("CFBundleDocumentTypes").expect("key");
+        let close = merged.rfind("</dict>").expect("closing tag");
+        assert!(key < close, "the association must be inside the dictionary");
+        assert!(merged.ends_with("</plist>\n"), "{merged}");
+        assert_eq!(
+            merged.matches("</dict>").count(),
+            plist.matches("</dict>").count(),
+            "no dictionary may be opened or closed twice"
+        );
+    }
+
+    #[test]
+    fn a_plist_without_a_dictionary_is_reported() {
+        assert!(insert_into_plist("<plist/>", "<key>x</key>").is_none());
     }
 
     #[test]
