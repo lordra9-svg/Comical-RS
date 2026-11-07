@@ -26,7 +26,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # The Apple silicon pool behind `macos-latest` repeatedly queued for
+        # fifteen minutes and was then cancelled without acquiring a runner,
+        # which left every run red on a gate that had not executed a single
+        # step. `macos-15-intel` schedules reliably, and the gate is the same
+        # work either way: clippy and the tests do not depend on the host
+        # architecture, and the release jobs build their own universal app.
+        os: [ubuntu-latest, windows-latest, macos-15-intel]
 
     steps:
       # v7 runs on the node24 action runtime; v4 still ships node20.
