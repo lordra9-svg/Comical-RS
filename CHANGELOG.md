@@ -5,6 +5,35 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.7] — 2026-11-07
+
+### Changed
+- The 7z reader runs on `sevenz-rust2`, the maintained fork of `sevenz-rust`,
+  whose repository was deleted upstream. The reader keeps its shape —
+  `ArchiveReader::open` plus `for_each_entries`, the same error mapping and the
+  same size cap — but the callback order now comes from the archive's block map
+  instead of a folder list, because 0.20 decodes block by block: a page's
+  position is its index in that walk, still counting the streamless entries the
+  callback receives. The reader no longer enables `compress`, which the old
+  `aes256` feature needed in order to link, so `aes256` on its own pulls only
+  the AES, CBC and key-derivation crates. The real 7-Zip corpus (solid, LZMA,
+  AES and encrypted headers) reads the same bytes.
+- `sevenz-rust2` is pinned to 0.20.2, the newest release whose minimum Rust is
+  1.85 rather than 1.93, so the declared `rust-version = "1.89"` stays true.
+  The swap removes fourteen crates from the tree, among them `time`,
+  `deranged` and `byteorder`.
+
+### Security
+- `sevenz-rust` 0.6.1 is out of the tree, which drops RUSTSEC-2026-0245 (a path
+  traversal in `decompress_impl` that allows an arbitrary file write on
+  extraction) and RUSTSEC-2026-0246 (unmaintained). Comical never called that
+  extraction API: the reader decodes through `for_each_entries` and writes
+  nothing to disk.
+- `tokio` 1.54.0 → 1.54.1 for RUSTSEC-2026-0384, a race between
+  `Interval::poll_tick` and the runtime's time driver, and `ctutils`
+  0.4.3 → 0.4.4 for RUSTSEC-2026-0385, non-constant-time mask generation and
+  `u128` comparisons in `Choice`.
+
 ## [0.2.6] — 2026-11-07
 
 ### Fixed

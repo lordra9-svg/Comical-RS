@@ -795,7 +795,7 @@ dependencies = [
 
 [[package]]
 name = "comical-app"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "comical-archive",
  "comical-core",
@@ -818,7 +818,7 @@ dependencies = [
 
 [[package]]
 name = "comical-archive"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "comical-core",
  "rars",
@@ -834,7 +834,7 @@ dependencies = [
 
 [[package]]
 name = "comical-cli"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "clap",
  "comical-archive",
@@ -844,7 +844,7 @@ dependencies = [
 
 [[package]]
 name = "comical-core"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "serde",
  "serde_json",
@@ -852,7 +852,7 @@ dependencies = [
 
 [[package]]
 name = "comical-image"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "image",
  "nom-exif",
@@ -4660,7 +4660,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "clap",
  "flate2",
