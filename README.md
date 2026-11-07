@@ -46,5 +46,5 @@ Implementation details, file ownership and the maintenance runbook start at
 
 ## License
 
-MIT for this repository. `rars` and `sevenz-rust` remain Apache-2.0. See
+MIT for this repository. `rars` and `sevenz-rust2` remain Apache-2.0. See
 `THIRD_PARTY_LICENSES.md`.

@@ -31,7 +31,7 @@ Additional top-level directories:
 |---|---|---|
 | UI toolkit | eframe/egui + wgpu backend | Cross-platform, GPU-accelerated, no native deps |
 | File dialog | rfd | Native dialogs on all platforms |
-| Archive formats | zip, rars, sevenz-rust | Pure Rust, no system libs, clean-room safe |
+| Archive formats | zip, rars, sevenz-rust2 | Pure Rust, no system libs, clean-room safe |
 | Image decode | image crate (png, jpeg, gif, webp) | Single dependency, format detection built in |
 | EXIF parsing | nom-exif | Pure Rust, actively maintained, zero-copy |
 | Parallelism | rayon for CPU prefetch, crossbeam for worker signaling | rayon = data parallelism; crossbeam = bounded channels |

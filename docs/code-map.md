@@ -111,7 +111,7 @@ caps, error mapping and the archive trait.
 
 | File | Owns |
 |---|---|
-| `Cargo.toml` | Reader-only features for `zip`, `rars`, `sevenz-rust` |
+| `Cargo.toml` | Reader-only features for `zip`, `rars`, `sevenz-rust2` |
 | `src/lib.rs` | Public trait, options, errors, format dispatch, filtering and sorting |
 | `src/zip.rs` | ZIP reader |
 | `src/rar.rs` | RAR reader and multi-volume rejection |
@@ -338,7 +338,7 @@ Development-only tooling. Never shipped.
 
 | File | Owns |
 |---|---|
-| `Cargo.toml` | Writer features for `zip`, `rars`, `sevenz-rust`; `clap`, `tar`, `flate2`, `sha2` for the commands |
+| `Cargo.toml` | Writer features for `zip`, `rars`, `sevenz-rust2`; `clap`, `tar`, `flate2`, `sha2` for the commands |
 | `src/lib.rs` | ZIP, RAR and 7z fixture writers; CP437 manual ZIP; sample set |
 | `src/main.rs` | `clap` dispatcher; keeps the bare-path fixture invocation working |
 | `src/fixtures.rs` | Writes the synthetic fixture set into a directory |

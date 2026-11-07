@@ -317,7 +317,7 @@ A slice is done when:
 | Risk | Effect | Mitigation |
 |---|---|---|
 | `rars` is young | RAR compatibility gaps | Real corpus, pin version, test all versions |
-| `sevenz-rust` is quiet | 7z codec or API gaps | Real corpus, callback-order tests |
+| `sevenz-rust2` is quiet | 7z codec or API gaps | Real corpus, callback-order tests |
 | No CI on macOS/Linux | Cross-platform regressions | Add matrix before UI |
 | No real corpus | Synthetic-only confidence | Build corpus before release |
 | Password not zeroized | Memory exposure | Use a secret wrapper |

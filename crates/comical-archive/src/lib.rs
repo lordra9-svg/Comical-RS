@@ -4,7 +4,7 @@
 //! sorted by the byte value of their full names. Reading a page returns its
 //! bytes and never writes to the archive or to disk.
 //!
-//! ZIP, RAR and 7z are read through the `zip`, `rars` and `sevenz-rust`
+//! ZIP, RAR and 7z are read through the `zip`, `rars` and `sevenz-rust2`
 //! crates. Directories are walked with the standard library.
 
 mod directory;

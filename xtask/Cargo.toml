@@ -25,7 +25,7 @@ tar = "0.4"
 # Writers exist only in this development tool and in tests.
 zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs", "aes-crypto"] }
 rars = { version = "0.11", default-features = false, features = ["write", "encryption"] }
-sevenz-rust = { version = "0.6.1", default-features = false, features = ["compress", "aes256"] }
+sevenz-rust2 = { version = "0.20.2", default-features = false, features = ["compress", "aes256"] }
 
 [dev-dependencies]
 tempfile = "3"

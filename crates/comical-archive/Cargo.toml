@@ -15,9 +15,10 @@ thiserror = { workspace = true }
 # requires encrypted archives.
 zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs", "aes-crypto"] }
 rars = { version = "0.11", default-features = false, features = ["encryption"] }
-# sevenz-rust 0.6.1's aes256 feature needs lzma-rust's encoder module to
-# compile, so compress is required even for this read-only consumer.
-sevenz-rust = { version = "0.6.1", default-features = false, features = ["aes256", "compress"] }
+# sevenz-rust2 is the maintained fork of the abandoned sevenz-rust. The reader
+# needs no compressor: aes256 pulls only the AES, CBC and key-derivation crates,
+# and decompression is unconditional.
+sevenz-rust2 = { version = "0.20.2", default-features = false, features = ["aes256"] }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -1,10 +1,11 @@
 //! 7z books.
 
+use std::borrow::Cow;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 use comical_core::PageEntry;
-use sevenz_rust::{Error as SevenZError, Password, SevenZReader};
+use sevenz_rust2::{ArchiveReader, Error as SevenZError, Password};
 
 use crate::{
     ArchiveError, ArchiveFormat, Candidate, ComicArchive, OpenOptions, check_declared_size,
@@ -16,14 +17,15 @@ pub(crate) fn open(
     options: &OpenOptions<'_>,
 ) -> Result<Box<dyn ComicArchive>, ArchiveError> {
     let password = options.password.unwrap_or("");
-    let reader = SevenZReader::open(path, Password::from(password))
+    let reader = ArchiveReader::open(path, Password::from(password))
         .map_err(|error| map_open_error(path, error))?;
     let archive = reader.archive();
 
-    // sevenz-rust walks decoded folders in order and then files without a
-    // stream. Record that exact callback order so a page can be located later.
-    // The order must include entries that are later skipped (directories,
-    // zero-byte files), because the reader still yields them to the callback.
+    // sevenz-rust2 decodes block by block and then yields the files that have
+    // no block of their own. Record that exact callback order so a page can be
+    // located later. The order must include entries that are later skipped
+    // (directories, zero-byte files), because the reader still yields them to
+    // the callback.
     let order = callback_order(archive);
     let mut ordinal = vec![None; archive.files.len()];
     for (position, file_index) in order.iter().copied().enumerate() {
@@ -71,27 +73,27 @@ pub(crate) fn open(
     }))
 }
 
-fn callback_order(archive: &sevenz_rust::Archive) -> Vec<usize> {
-    let mut order = Vec::new();
-    for folder_index in 0..archive.folders.len() {
-        let start = archive.stream_map.folder_first_file_index[folder_index];
-        let count = archive.folders[folder_index].num_unpack_sub_streams;
-        for file_index in start..start.saturating_add(count) {
-            order.push(file_index);
+/// Reproduces the order in which `for_each_entries` hands entries to its
+/// callback.
+///
+/// The reader decodes one block at a time, in block order, and then yields
+/// every file that is not part of a block. A file without a stream of its own
+/// is still yielded, so the position has to count it even when the page is
+/// skipped later.
+fn callback_order(archive: &sevenz_rust2::Archive) -> Vec<usize> {
+    let mut per_block = vec![Vec::new(); archive.blocks.len()];
+    let mut without_block = Vec::new();
+    for (file_index, block_index) in archive.stream_map.file_block_index.iter().enumerate() {
+        match *block_index {
+            Some(block) if block < per_block.len() => per_block[block].push(file_index),
+            _ => without_block.push(file_index),
         }
     }
-    for (file_index, _) in archive.files.iter().enumerate() {
-        let in_folder = archive
-            .stream_map
-            .file_folder_index
-            .get(file_index)
-            .copied()
-            .flatten()
-            .is_some();
-        if !in_folder {
-            order.push(file_index);
-        }
+    let mut order = Vec::with_capacity(archive.files.len());
+    for entries in per_block {
+        order.extend(entries);
     }
+    order.extend(without_block);
     order
 }
 
@@ -123,7 +125,7 @@ impl ComicArchive for SevenZBook {
 
         let password = self.password.as_deref().unwrap_or("");
         let mut reader =
-            SevenZReader::open(&self.path, Password::from(password)).map_err(map_read_error)?;
+            ArchiveReader::open(&self.path, Password::from(password)).map_err(map_read_error)?;
 
         let target = self.sources[index];
         let expected = self
@@ -138,20 +140,22 @@ impl ComicArchive for SevenZBook {
 
         reader
             .for_each_entries(|entry, source| {
-                // Returning false stops the current folder, not the whole
-                // traversal. Skip every later folder once the page is found.
+                // Returning false stops the current block, not the whole
+                // traversal. Skip every later block once the page is found.
                 if found.is_some() || overflow {
                     return Ok(false);
                 }
                 if seen == target {
                     if entry.name != expected {
-                        return Err(SevenZError::other("7z entry order changed while reading"));
+                        return Err(SevenZError::Other(Cow::Borrowed(
+                            "7z entry order changed while reading",
+                        )));
                     }
                     let mut bytes = Vec::new();
                     source
                         .take(limit.saturating_add(1))
                         .read_to_end(&mut bytes)
-                        .map_err(SevenZError::io)?;
+                        .map_err(no_context)?;
                     if bytes.len() as u64 > limit {
                         overflow = true;
                         overflow_size = bytes.len() as u64;
@@ -160,9 +164,9 @@ impl ComicArchive for SevenZBook {
                     }
                     return Ok(false);
                 }
-                // Solid folders require prior entries to be fully consumed;
+                // Solid blocks require prior entries to be fully consumed;
                 // otherwise later CRC checks fail (sevenz-rust issue #31).
-                io::copy(source, &mut io::sink()).map_err(SevenZError::io)?;
+                io::copy(source, &mut io::sink()).map_err(no_context)?;
                 seen += 1;
                 Ok(true)
             })
@@ -182,6 +186,11 @@ impl ComicArchive for SevenZBook {
             ))
         })
     }
+}
+
+/// Wraps a callback I/O failure the way the crate expects.
+fn no_context(error: io::Error) -> SevenZError {
+    SevenZError::Io(error, Cow::Borrowed(""))
 }
 
 fn map_open_error(path: &Path, error: SevenZError) -> ArchiveError {

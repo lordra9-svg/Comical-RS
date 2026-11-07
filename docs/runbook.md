@@ -201,11 +201,11 @@ For `rars`:
    multi-volume tests.
 4. Check the license.
 
-For `sevenz-rust`:
+For `sevenz-rust2`:
 
-1. Check `SevenZReader`, `for_each_entries` order, password errors and
-   `SevenZMethod`.
-2. Keep `aes256` and `compress` unless the crate changes the feature dependency.
+1. Check `ArchiveReader`, `for_each_entries` order, password errors and
+   `EncoderMethod`.
+2. Keep `aes256` on the reader and `compress` on the development tool.
 3. Run 7z list, exact bytes, AES and corrupt tests.
 4. Re-check callback order and the name guard.
 5. Check the license.
@@ -260,7 +260,7 @@ icon, file associations, the fatal-error dialog and the MSI.
 ## Provenance and licensing
 
 - New code is MIT.
-- `rars`, `sevenz-rust` and `lzma-rust` are Apache-2.0.
+- `rars`, `sevenz-rust2` and `lzma-rust2` are Apache-2.0.
 - `zlib-rs` is Zlib.
 - `r-efi` is triple-licensed MIT / Apache-2.0 / LGPL-2.1-or-later; the project
   elects MIT or Apache-2.0.

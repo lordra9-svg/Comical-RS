@@ -44,7 +44,7 @@ Spec version: spec-v1
 
 External sources used: the behavior specification and vectors in this
 repository, the public documentation and crate sources of the allowed
-dependencies (`zip`, `rars`, `sevenz-rust`, `clap`, `thiserror`, `tempfile`),
+dependencies (`zip`, `rars`, `sevenz-rust2`, `clap`, `thiserror`, `tempfile`),
 and the Rust standard library documentation. No original Comical source,
 analysis document, C++ harness or Bloks memory file was read.
 
@@ -77,7 +77,11 @@ analysis document, C++ harness or Bloks memory file was read.
   layout and zoom, testing, runbook and roadmap. No product code was edited.
   The docs contain no original source text, identifiers or line references.
 
-- 2026-10-20: Spec author acted as oracle runner for the image-filter vectors. A\n  dirty-side harness outside this repository ran the original resize behavior\n  on a synthetic 17x11 RGB image. Only source bytes, parameters and SHA-256\n  hashes were exported to `tests/vectors/images.json`. The harness is not in\n  this repository. No product code was edited.\n\n## AI caveat
+- 2026-10-20: Spec author acted as oracle runner for the image-filter vectors. A\n  dirty-side harness outside this repository ran the original resize behavior\n  on a synthetic 17x11 RGB image. Only source bytes, parameters and SHA-256\n  hashes were exported to `tests/vectors/images.json`. The harness is not in\n  this repository. No product code was edited.\n\n- 2026-11-07: Maintainer replaced the abandoned 7z reader dependency. Read the
+  public sources and changelog of `sevenz-rust2` 0.20.2 with `lzma-rust2` 0.16.5
+  to port the reader. No product source outside this repository was read.
+
+## AI caveat
 
 Clean-room doctrine was built for people. Model weights are not auditable. A
 separate session with no access to the source is the best available

@@ -8,7 +8,8 @@ use std::fs::File;
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 
-use sevenz_rust::{AesEncoderOptions, Password, SevenZArchiveEntry, SevenZMethod, SevenZWriter};
+use sevenz_rust2::encoder_options::AesEncoderOptions;
+use sevenz_rust2::{ArchiveEntry, ArchiveWriter, EncoderMethod, Password};
 use zip::write::SimpleFileOptions;
 use zip::{AesMode, CompressionMethod, ZipWriter};
 
@@ -282,9 +283,9 @@ pub fn write_rar_volume_set(
 
 /// Writes a 7z archive with LZMA2 content.
 pub fn write_7z(path: &Path, entries: &[FixtureEntry<'_>]) -> Result<(), Box<dyn Error>> {
-    let mut writer = SevenZWriter::create(path)?;
+    let mut writer = ArchiveWriter::create(path)?;
     for entry in entries {
-        let mut archive_entry = SevenZArchiveEntry::new();
+        let mut archive_entry = ArchiveEntry::new();
         archive_entry.name = entry.name.to_owned();
         writer.push_archive_entry(archive_entry, Some(Cursor::new(entry.data)))?;
     }
@@ -298,13 +299,13 @@ pub fn write_7z_encrypted(
     entries: &[FixtureEntry<'_>],
     password: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let mut writer = SevenZWriter::create(path)?;
+    let mut writer = ArchiveWriter::create(path)?;
     writer.set_content_methods(vec![
         AesEncoderOptions::new(Password::from(password)).into(),
-        SevenZMethod::LZMA2.into(),
+        EncoderMethod::LZMA2.into(),
     ]);
     for entry in entries {
-        let mut archive_entry = SevenZArchiveEntry::new();
+        let mut archive_entry = ArchiveEntry::new();
         archive_entry.name = entry.name.to_owned();
         writer.push_archive_entry(archive_entry, Some(Cursor::new(entry.data)))?;
     }

@@ -18,7 +18,7 @@ comical-cli
     v
 comical-archive  --->  comical-core
     |
-    +--> zip, rars, sevenz-rust
+    +--> zip, rars, sevenz-rust2
 
 comical-image    --->  image (PNG, JPEG, GIF decode)
 
@@ -27,7 +27,7 @@ comical-app  --->  comical-core, comical-archive, comical-image
     +--> eframe, egui, rfd, lru, thiserror
 
 xtask            (development only: fixtures, gate, corpus, releases)
-    +--> zip, rars, sevenz-rust writer features, clap, tar, flate2, sha2
+    +--> zip, rars, sevenz-rust2 writer features, clap, tar, flate2, sha2
 ```
 
 ## Dependency rules

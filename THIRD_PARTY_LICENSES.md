@@ -6,8 +6,8 @@ This repository is MIT. These dependencies keep their own licenses.
 |---|---|---|
 | `zip` | MIT | ZIP reader |
 | `rars` | Apache-2.0 | RAR reader |
-| `sevenz-rust` | Apache-2.0 | 7z reader |
-| `lzma-rust` | Apache-2.0 | LZMA codec behind `sevenz-rust` |
+| `sevenz-rust2` | Apache-2.0 | 7z reader |
+| `lzma-rust2` | Apache-2.0 | LZMA codec behind `sevenz-rust2` |
 | `zlib-rs` | Zlib | Deflate behind `zip` |
 | `image` | MIT OR Apache-2.0 | JPEG, PNG, GIF decode |
 | `byteorder-lite` | Unlicense OR MIT | Byte order helpers behind `image` |

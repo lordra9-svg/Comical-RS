@@ -221,22 +221,22 @@ File: `src/sevenz.rs`.
 Dependency and features:
 
 ```toml
-sevenz-rust = { version = "0.6.1", default-features = false,
-                features = ["aes256", "compress"] }
+sevenz-rust2 = { version = "0.20.2", default-features = false,
+                 features = ["aes256"] }
 ```
 
-`compress` is required even though this is read-only: the `aes256` feature in
-0.6.1 does not compile without the encoder module. Do not remove it without
-checking the crate.
+The reader needs no compressor: `aes256` pulls only the AES, CBC and
+key-derivation crates, and decompression is unconditional. The development tool
+and the tests enable `compress` because they write the fixtures.
 
 Open:
 
-- `SevenZReader::open(path, Password::from(password))`.
+- `ArchiveReader::open(path, Password::from(password))`.
 - Parse the archive header. Encrypted headers fail here.
 - `callback_order` builds the order in which `for_each_entries` will visit files:
-  1. For each folder, walk its file-index range and include files with a stream
-     and a non-zero size.
-  2. Then append every file not assigned to a folder.
+  1. For each block, walk the files the stream map assigns to it, in file-index
+     order, and include the ones with a stream and a non-zero size.
+  2. Then append every file not assigned to a block.
 - Build an ordinal map from file index to callback position.
 - Keep the callback position as the page source, not the file index.
 
@@ -259,7 +259,7 @@ whole archive. The callback checks `found` and `overflow` first and returns
 
 Error mapping:
 
-| `sevenz_rust` error | `ArchiveError` |
+| `sevenz_rust2` error | `ArchiveError` |
 |---|---|
 | `PasswordRequired` | `PasswordRequired` |
 | `MaybeBadPassword` | `BadPassword` |
@@ -337,4 +337,5 @@ interoperability with every real-world writer. A real corpus is still required.
 - Directory symlinks are skipped.
 - RAR writer corpus and fuzzing are still open.
 - Solid 7z from real 7-Zip requires prior entries to be fully drained while
-  seeking; `src/sevenz.rs` does that (sevenz-rust issue #31).
+  seeking; `src/sevenz.rs` does that (sevenz-rust issue #31, inherited by the
+  fork).
