@@ -5,6 +5,22 @@ All notable changes to Comical-RS are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.6] — 2026-11-07
+
+### Fixed
+- The `Release` workflow can be dispatched again. The signing secrets were read
+  from a step-level `if`, which GitHub rejects while parsing the file, so every
+  dispatch failed with `Unrecognized named-value: 'secrets'` before a job could
+  start. They are declared once in the macOS job's environment and the step
+  branches on that.
+- Windows CI passes the gate. `zip_directory` joined member names with
+  `Path::join`, which writes backslashes on Windows, so the bundle zip was only
+  correct because it is built on macOS; the names are now joined with `/`,
+  which is the separator the archive format defines. The two zip checks that
+  need an executable bit run on unix only, because the zip crate records a unix
+  mode only when it runs there, and it is right to reject the `0664` entries a
+  Windows build produces.
+
 ## [0.2.5] — 2026-11-03
 
 ### Added
